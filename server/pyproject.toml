@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-video-creator"
+version = "2.0.0"
+description = "Multi-genre AI video production pipeline — local GPU"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.32,<3",
+    "numpy>=2.0,<3",
+    "soundfile>=0.13,<1",
+    "kokoro>=0.9,<1",
+    "diffusers>=0.42,<1",
+    "transformers>=4.40,<6",
+    "accelerate>=1.0,<2",
+    "safetensors>=0.5,<1",
+    "gradio>=5.0,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9"]
+
+[project.scripts]
+ai-video = "_cli:main"
+ai-trends = "_update_trends:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pipeline*", "genres*", "trends*", "app*"]

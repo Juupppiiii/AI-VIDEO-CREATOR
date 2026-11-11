@@ -1,0 +1,26 @@
+{
+  "name": "Mystery",
+  "description": "Whodunit and puzzle stories that challenge viewers to solve the mystery before the reveal",
+  "target_scenes": 8,
+  "target_duration_seconds": 100,
+
+  "voice": "af_bella",
+  "voice_speed": 0.85,
+  "music_mood": "mysterious",
+
+  "image_style": "noir detective style digital art, moody atmospheric lighting, deep shadows, muted color palette with selective color highlights, cinematic mystery composition, detailed environments, intrigue",
+  "negative_prompt": "bright cheerful colors, cartoon, childish, anime, sunny, low quality, blurry, flat lighting",
+
+  "voice_map": {
+    "narrator": "af_bella",
+    "character_1": "am_adam",
+    "character_2": "af_nicole",
+    "character_3": "am_michael"
+  },
+
+  "script_system_prompt": "You write scripts for mystery videos that turn viewers into detectives. Every clue you plant matters. You use misdirection skillfully — red herrings that feel fair in hindsight. The viewer should be able to solve it if they pay close attention, but most won't. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a mystery story video script.\n\nPremise: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- HOOK: Scene 1 presents the mystery — something is wrong, someone is missing, a crime has been committed. Make it specific and intriguing.\n- Scenes 2-5: Drop clues one per scene. Each clue should point toward the truth BUT also support at least one wrong conclusion. Include one clear red herring.\n- Include a \"pause and think\" moment: \"Can you figure it out? The answer is in the next scene.\"\n- The reveal: second-to-last scene reveals the truth. It must feel surprising but fair — every clue supported it.\n- The final scene shows the aftermath and adds one last detail that makes the viewer rethink everything.\n- Narration is 2-3 sentences per scene (about 15 seconds). Build suspense with pacing.\n- speaker: \"narrator\" for investigation, \"character_1\"/\"character_2\" for witness statements or dialogue.\n- image_prompt: noir/mystery aesthetic, atmospheric, show clues and suspicious details. No text.\n- mood: one of \"intriguing\", \"suspicious\", \"tense\", \"revealing\", \"shocking\", \"satisfying\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"mysterious YouTube title under 70 characters\",\n  \"description\": \"2-3 sentences that hook without spoiling\",\n  \"tags\": [\"mystery\", \"detective\", \"whodunit\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"intriguing\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

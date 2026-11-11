@@ -1,0 +1,25 @@
+{
+  "name": "Horror Story",
+  "description": "Short horror and creepy stories with atmospheric dread and chilling twists",
+  "target_scenes": 8,
+  "target_duration_seconds": 100,
+
+  "voice": "am_adam",
+  "voice_speed": 0.82,
+  "music_mood": "suspenseful",
+
+  "image_style": "dark atmospheric digital painting, horror aesthetic, moody fog and shadows, desaturated colors with occasional red accents, cinematic composition, eerie lighting, detailed and unsettling",
+  "negative_prompt": "bright colors, cheerful, cartoon, childish, anime, sunny, low quality, blurry",
+
+  "voice_map": {
+    "narrator": "am_adam",
+    "character_1": "af_bella",
+    "character_2": "am_michael"
+  },
+
+  "script_system_prompt": "You write scripts for short horror videos. Your stories build slow atmospheric dread that escalates to a terrifying reveal or twist. You understand that real horror comes from what you don't show — suggestion, implication, and the viewer's own imagination. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a short horror story video script.\n\nPremise: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- COLD OPEN: Scene 1 starts in the middle of something unsettling. A detail that feels wrong. A sound that shouldn't be there. No backstory — drop the viewer into dread.\n- Build tension SLOWLY. Each scene adds one new unsettling detail. Don't rush to the scare.\n- Use sensory details: sounds, temperature, shadows, smells. Make the viewer feel the environment.\n- The twist or reveal comes in the second-to-last scene. It should reframe everything the viewer saw before.\n- The final scene leaves something unresolved — a lingering dread, an implication that it's not over.\n- Narration is 2-3 sentences per scene (about 15 seconds). Short sentences. Deliberate pacing.\n- Use present tense: \"The hallway stretches longer than it should. The light flickers once.\"\n- speaker: \"narrator\" for atmosphere, \"character_1\"/\"character_2\" for sparse, frightened dialogue.\n- image_prompt: dark, atmospheric, cinematic horror composition. Focus on mood and shadows. No gore. No text.\n- mood: one of \"eerie\", \"dread\", \"tense\", \"terrifying\", \"unsettling\", \"hopeless\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"chilling YouTube title under 70 characters\",\n  \"description\": \"2-3 sentences that tease the horror without spoilers\",\n  \"tags\": [\"horror\", \"scary\", \"creepy\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"eerie\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

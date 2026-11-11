@@ -1,0 +1,23 @@
+{
+  "name": "Trivia Quiz",
+  "description": "Fun trivia and quiz videos that challenge viewers with surprising facts",
+  "target_scenes": 8,
+  "target_duration_seconds": 90,
+
+  "voice": "af_nicole",
+  "voice_speed": 0.92,
+  "music_mood": "cheerful",
+
+  "image_style": "colorful infographic style illustration, bold clean design, quiz show aesthetic, bright saturated colors, modern flat illustration with depth, engaging visual",
+  "negative_prompt": "text, words, letters, numbers, realistic photo, dark, scary, low quality",
+
+  "voice_map": {
+    "narrator": "af_nicole"
+  },
+
+  "script_system_prompt": "You write scripts for trivia and quiz videos that are addictive to watch. Every question builds suspense, and the answers are genuinely surprising. You make viewers feel smart when they get it right and amazed when they learn something new. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a trivia quiz video script.\n\nTopic: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- HOOK: Scene 1 opens with the hardest or most surprising question to grab attention: \"Most people get this wrong...\" or \"Only 1 in 10 people know this...\"\n- Structure: alternate between QUESTION scenes and ANSWER scenes. Each question builds suspense (\"Think you know? The answer might surprise you...\"), then the next scene reveals the answer with an interesting explanation.\n- Include {scenes} total scenes — roughly half questions, half answers, plus the hook and wrap-up.\n- Mix difficulty: start mind-blowing, include a few easy wins to keep confidence up, end with a tough one.\n- Each scene's narration is 2-3 sentences (about 12-15 seconds read aloud).\n- The final scene gives a quick score recap and teases: \"If you got more than 3 right, you're officially a genius.\"\n- speaker: use \"narrator\" for everything.\n- image_prompt: visualize the question or answer — show the subject being discussed. Bold, colorful, quiz-show energy. No text in the image.\n- mood: one of \"curious\", \"suspenseful\", \"revealing\", \"excited\", \"impressed\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"catchy YouTube title under 70 characters with a challenge hook\",\n  \"description\": \"2-3 sentences teasing the quiz\",\n  \"tags\": [\"trivia\", \"quiz\", \"facts\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"curious\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

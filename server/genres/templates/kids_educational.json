@@ -1,0 +1,28 @@
+{
+  "name": "Kids Educational",
+  "description": "Fun, colorful learning videos for young children (ages 3-8)",
+  "target_scenes": 7,
+  "target_duration_seconds": 90,
+
+  "voice": "af_heart",
+  "voice_speed": 0.9,
+  "music_mood": "cheerful",
+
+  "image_style": "children's picture book illustration, bright cheerful colors, soft rounded shapes, flat cartoon style, simple clean background, cute and friendly, high quality digital art",
+  "negative_prompt": "scary, dark, creepy, realistic photo, violent, complex background",
+
+  "mascot_name": "Sunny",
+  "mascot_look": "a cute friendly orange fox wearing a little green scarf",
+
+  "voice_map": {
+    "narrator": "af_heart"
+  },
+
+  "script_system_prompt": "You write scripts for short educational videos for young children. Your scripts are fun, surprising, and keep kids watching from the first second. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a kids educational video script.\n\nTopic: \"{topic}\"\nAudience age: {age} years old\nNumber of scenes: {scenes}\n\nRules:\n- HOOK FIRST: Scene 1 must open with something that grabs attention instantly — a surprising fact, a mystery, or a \"did you know?\" that makes kids curious. No generic greetings.\n- Use very simple words and short sentences. Warm, cheerful, encouraging tone.\n- Each scene's narration is 2 to 3 short sentences (about 15 seconds when read aloud).\n- The middle scenes each teach ONE simple, TRUE fact. Do not invent facts.\n- Include one \"can you guess?\" moment to keep kids engaged.\n- The last scene gives a quick fun recap and says goodbye.\n- The friendly mascot is a fox named Sunny. Use him as a guide in some scenes.\n- image_prompt: describe ONLY what to draw, one concrete visual scene, no text in the picture. If Sunny appears, write \"Sunny\".\n- speaker: use \"narrator\" for all scenes.\n- mood: one of \"cheerful\", \"curious\", \"excited\", \"warm\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"catchy YouTube title under 70 characters\",\n  \"description\": \"2-3 sentence YouTube description\",\n  \"tags\": [\"kids\", \"learning\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"cheerful\"}\n  ]\n}",
+
+  "age_options": ["2-4", "4-6", "5-8"],
+  "default_age": "4-6",
+  "made_for_kids": true
+}

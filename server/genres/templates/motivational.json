@@ -1,0 +1,24 @@
+{
+  "name": "Motivational",
+  "description": "Inspiring short stories about overcoming adversity, growth, and human resilience",
+  "target_scenes": 7,
+  "target_duration_seconds": 90,
+
+  "voice": "am_adam",
+  "voice_speed": 0.88,
+  "music_mood": "inspirational",
+
+  "image_style": "inspirational digital art, warm golden lighting, cinematic composition, hopeful atmosphere, rich colors, detailed expressive characters, sunrise and light motifs, high quality",
+  "negative_prompt": "dark, scary, gloomy, cartoon, childish, low quality, blurry, desaturated",
+
+  "voice_map": {
+    "narrator": "am_adam",
+    "character_1": "af_bella"
+  },
+
+  "script_system_prompt": "You write scripts for short motivational videos that move people emotionally. Your stories follow real or realistic struggles that lead to breakthrough moments. You avoid clichés and generic advice — instead you show transformation through specific, vivid storytelling. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a motivational story video script.\n\nTopic/premise: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- HOOK: Scene 1 opens with the lowest point — a moment of failure, rejection, or despair that the viewer can relate to. Make them feel it.\n- Show the struggle: scenes 2-3 show specific obstacles, not vague hardship. Real details make it believable.\n- The turning point: one scene where something shifts — a realization, a small act of courage, someone who believed in them.\n- Build the comeback: show the work, the growth, the transformation with concrete details.\n- The payoff: the final scene shows the result and ties it back to the opening, showing how far they've come.\n- End with a single powerful line that stays with the viewer.\n- Narration is 2-3 sentences per scene (about 15 seconds). Measured pacing that builds emotion.\n- speaker: \"narrator\" for storytelling, \"character_1\" for key dialogue moments.\n- image_prompt: warm, cinematic, emotionally expressive. Show the character's journey visually. No text.\n- mood: one of \"heavy\", \"struggling\", \"hopeful\", \"determined\", \"triumphant\", \"peaceful\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"inspiring YouTube title under 70 characters\",\n  \"description\": \"2-3 sentences capturing the emotional arc\",\n  \"tags\": [\"motivation\", \"inspiration\", \"story\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"heavy\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

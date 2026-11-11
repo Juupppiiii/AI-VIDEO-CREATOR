@@ -1,0 +1,26 @@
+{
+  "name": "Drama Story",
+  "description": "Dramatic short stories with emotional stakes, twists, and cinematic tension — Drama Box style",
+  "target_scenes": 8,
+  "target_duration_seconds": 100,
+
+  "voice": "af_bella",
+  "voice_speed": 0.85,
+  "music_mood": "dramatic",
+
+  "image_style": "cinematic digital art, dramatic lighting, moody atmosphere, detailed faces and expressions, film still quality, high contrast, volumetric lighting, photorealistic style",
+  "negative_prompt": "cartoon, anime, childish, bright cheerful colors, flat lighting, low quality, blurry",
+
+  "voice_map": {
+    "narrator": "af_bella",
+    "character_1": "am_adam",
+    "character_2": "af_nicole",
+    "character_3": "am_michael"
+  },
+
+  "script_system_prompt": "You write scripts for dramatic short-form video stories that hook viewers in the first 5 seconds. Your stories have emotional depth, surprising twists, and cinematic pacing. Think Drama Box or Zack D Films. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a dramatic short video script.\n\nPremise: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- COLD OPEN: Scene 1 drops the viewer into the middle of something dramatic. No setup, no introduction. Start with conflict, a shocking moment, or a desperate situation. The first sentence must make someone stop scrolling.\n- Every scene MUST end with a micro-cliffhanger or unanswered question that forces the viewer to keep watching.\n- Build emotional stakes: betrayal, secrets, impossible choices, unexpected revelations, moral dilemmas.\n- Include at least ONE plot twist the viewer will not see coming.\n- The final scene must deliver a satisfying payoff — a shocking reveal, an emotional gut-punch, or a twist that reframes the entire story.\n- Narration is 2-3 punchy sentences per scene (about 15 seconds read aloud). Short. Impactful.\n- Use present tense for immediacy: \"She opens the door. Her heart stops.\"\n- Assign speakers: \"narrator\" for third-person narration, \"character_1\", \"character_2\" for direct dialogue.\n- image_prompt: cinematic composition, describe the visual with specific lighting, character expressions, and atmosphere. No text in the image.\n- mood: one of \"tense\", \"emotional\", \"shocking\", \"mysterious\", \"triumphant\", \"heartbreaking\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"dramatic YouTube title under 70 characters — include emotion or intrigue\",\n  \"description\": \"2-3 sentence description that teases the story without spoiling the twist\",\n  \"tags\": [\"drama\", \"story\", \"twist\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"tense\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

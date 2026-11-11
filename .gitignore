@@ -1,31 +1,33 @@
+# Generated content
+output/
+data/
+
+# Music and SFX files (large, user-provided)
+music/**/*.mp3
+music/**/*.wav
+sfx/**/*.mp3
+sfx/**/*.wav
+
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
 venv/
 env/
-.venv/
 
-# Generated video output
-output/
-
-# Downloaded FFmpeg archives (winget installs it, no need to track these)
-ffmpeg-*.tar.xz
-ffmpeg-*.zip
-ffmpeg-n*/
-
-# Hugging Face model cache
-.cache/
-
-# Music folder contents (user supplies their own royalty-free tracks)
-music/*.mp3
-music/*.wav
-
-# OS / editor
-.DS_Store
-Thumbs.db
-desktop.ini
+# IDE
 .vscode/
-*.swp
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Kiro
+.kiro/
