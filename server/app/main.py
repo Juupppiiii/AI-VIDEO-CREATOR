@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gradio web UI for the multi-genre video production pipeline.
-iOS-inspired design with clean cards, soft shadows, and intuitive flow.
+iOS-inspired design with clean cards, soft shadows, and SVG icons.
 
 Run:  python server/app/main.py   (opens at http://127.0.0.1:7860)
 """
@@ -38,22 +38,77 @@ from trends.fetcher import (
 RESOLUTIONS = {"720p (faster)": (1280, 720), "1080p (slower)": (1920, 1080)}
 HEADERS = ["Narration", "Image prompt", "Speaker", "Mood"]
 
-# Genre display with emoji icons
+# Clean text labels — SVG icons are added purely via CSS
 GENRE_LABELS = {
-    "drama_story":      "🎭  Drama",
-    "kids_educational":  "📚  Kids",
-    "trivia_quiz":       "❓  Trivia",
-    "horror_story":      "👻  Horror",
-    "motivational":      "💪  Motivational",
-    "mystery":           "🔍  Mystery",
+    "drama_story":      "Drama",
+    "kids_educational":  "Kids",
+    "trivia_quiz":       "Trivia",
+    "horror_story":      "Horror",
+    "motivational":      "Motivational",
+    "mystery":           "Mystery",
 }
+
+# ── SVG icon data URIs (Lucide-style, stroke-only, 18px) ───────────────
+# Encoded for use as CSS mask-image. Icons inherit text color via mask.
+_ICON_DRAMA = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Crect x='2' y='2' width='20' height='20' rx='2'/%3E"
+    "%3Cpath d='M7 2v4M12 2v4M17 2v4'/%3E"
+    "%3Cline x1='2' y1='8' x2='22' y2='8'/%3E%3C/svg%3E"
+)
+_ICON_HORROR = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Cpath d='M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z'/%3E%3C/svg%3E"
+)
+_ICON_KIDS = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Cpath d='M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2V3z'/%3E"
+    "%3Cpath d='M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7V3z'/%3E%3C/svg%3E"
+)
+_ICON_MOTIVATIONAL = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Cpolyline points='23 6 13.5 15.5 8.5 10.5 1 18'/%3E"
+    "%3Cpolyline points='17 6 23 6 23 12'/%3E%3C/svg%3E"
+)
+_ICON_MYSTERY = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Ccircle cx='11' cy='11' r='8'/%3E"
+    "%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"
+)
+_ICON_TRIVIA = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
+    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Ccircle cx='12' cy='12' r='10'/%3E"
+    "%3Cpath d='M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3'/%3E"
+    "%3Cline x1='12' y1='17' x2='12.01' y2='17'/%3E%3C/svg%3E"
+)
+# Lightbulb for the trends accordion
+_ICON_LIGHTBULB = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' "
+    "height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E"
+    "%3Cpath d='M9 18h6M10 22h4'/%3E"
+    "%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A7 7 0 1012 2a7 7 0 00-4.5 "
+    "12.5c.76.76 1.23 1.52 1.41 2.5'/%3E%3C/svg%3E"
+)
 
 
 # ── iOS-inspired CSS ────────────────────────────────────────────────────
-IOS_CSS = """
+IOS_CSS = f"""
 /* ═══ iOS Design System ═══ */
 
-:root {
+:root {{
     --ios-blue: #007AFF;
     --ios-blue-hover: #0066D6;
     --ios-green: #34C759;
@@ -70,58 +125,54 @@ IOS_CSS = """
     --ios-shadow-hover: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
     --ios-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
                 "Helvetica Neue", Arial, sans-serif;
-}
+}}
 
 /* Base container */
-.gradio-container {
+.gradio-container {{
     font-family: var(--ios-font) !important;
     background: var(--ios-bg) !important;
     max-width: 900px !important;
     margin: 0 auto !important;
-}
+}}
 
-/* Remove default Gradio borders everywhere */
-.block, .form, .wrap {
+.block, .form, .wrap {{
     border: none !important;
-}
+}}
 
 /* ═══ Header ═══ */
-.ios-header {
+.ios-header {{
     text-align: center;
     padding: 28px 16px 12px;
-}
-
-.ios-header h1 {
+}}
+.ios-header h1 {{
     font-size: 28px !important;
     font-weight: 700 !important;
     color: var(--ios-text) !important;
     letter-spacing: -0.02em !important;
     margin: 0 0 4px 0 !important;
-}
-
-.ios-header p {
+}}
+.ios-header p {{
     font-size: 15px !important;
     color: var(--ios-secondary) !important;
     margin: 0 !important;
     font-weight: 400 !important;
-}
+}}
 
 /* ═══ Cards ═══ */
-.ios-card {
+.ios-card {{
     background: var(--ios-card) !important;
     border-radius: var(--ios-radius) !important;
     box-shadow: var(--ios-shadow) !important;
     border: none !important;
     padding: 20px 20px 16px !important;
     margin-bottom: 12px !important;
-}
-
-.ios-card .label-wrap {
+}}
+.ios-card .label-wrap {{
     margin-bottom: 4px !important;
-}
+}}
 
-/* Section titles inside cards */
-.ios-section-title {
+/* Section titles */
+.ios-section-title {{
     font-size: 13px !important;
     font-weight: 600 !important;
     color: var(--ios-secondary) !important;
@@ -129,20 +180,22 @@ IOS_CSS = """
     letter-spacing: 0.04em !important;
     padding: 0 4px !important;
     margin-bottom: 8px !important;
-}
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+}}
 
-/* ═══ Genre Radio Buttons (segmented control look) ═══ */
-.ios-genre-picker .wrap {
+/* ═══ Genre Radio — card pills with SVG icons ═══ */
+.ios-genre-picker .wrap {{
     gap: 8px !important;
     flex-wrap: wrap !important;
     justify-content: center !important;
-}
-
-.ios-genre-picker label {
+}}
+.ios-genre-picker label {{
     background: var(--ios-card) !important;
-    border: 2px solid transparent !important;
+    border: 2px solid var(--ios-separator) !important;
     border-radius: var(--ios-radius-sm) !important;
-    padding: 10px 14px !important;
+    padding: 10px 16px !important;
     font-size: 14px !important;
     font-weight: 500 !important;
     color: var(--ios-text) !important;
@@ -151,28 +204,76 @@ IOS_CSS = """
     box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
     min-width: 110px !important;
     text-align: center !important;
-}
-
-.ios-genre-picker label:hover {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+}}
+.ios-genre-picker label:hover {{
     box-shadow: var(--ios-shadow-hover) !important;
     transform: translateY(-1px) !important;
-}
-
-.ios-genre-picker label.selected {
+    border-color: var(--ios-tertiary) !important;
+}}
+.ios-genre-picker label.selected {{
     border-color: var(--ios-blue) !important;
-    background: rgba(0, 122, 255, 0.06) !important;
+    background: rgba(0, 122, 255, 0.05) !important;
     color: var(--ios-blue) !important;
     font-weight: 600 !important;
-}
-
-.ios-genre-picker .label-wrap {
+}}
+.ios-genre-picker .label-wrap {{
     display: none !important;
-}
+}}
+
+/* ─── Inline SVG icons via CSS mask (inherit text color) ─── */
+.ios-genre-picker label::before {{
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    background-color: currentColor;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    opacity: 0.7;
+}}
+.ios-genre-picker label.selected::before {{
+    opacity: 1;
+}}
+
+/* Genre order: drama, horror, kids, motivational, mystery, trivia */
+.ios-genre-picker label:nth-child(1)::before {{
+    -webkit-mask-image: url("{_ICON_DRAMA}");
+    mask-image: url("{_ICON_DRAMA}");
+}}
+.ios-genre-picker label:nth-child(2)::before {{
+    -webkit-mask-image: url("{_ICON_HORROR}");
+    mask-image: url("{_ICON_HORROR}");
+}}
+.ios-genre-picker label:nth-child(3)::before {{
+    -webkit-mask-image: url("{_ICON_KIDS}");
+    mask-image: url("{_ICON_KIDS}");
+}}
+.ios-genre-picker label:nth-child(4)::before {{
+    -webkit-mask-image: url("{_ICON_MOTIVATIONAL}");
+    mask-image: url("{_ICON_MOTIVATIONAL}");
+}}
+.ios-genre-picker label:nth-child(5)::before {{
+    -webkit-mask-image: url("{_ICON_MYSTERY}");
+    mask-image: url("{_ICON_MYSTERY}");
+}}
+.ios-genre-picker label:nth-child(6)::before {{
+    -webkit-mask-image: url("{_ICON_TRIVIA}");
+    mask-image: url("{_ICON_TRIVIA}");
+}}
 
 /* ═══ Inputs ═══ */
 .ios-card input[type="text"],
 .ios-card textarea,
-.ios-card .wrap input {
+.ios-card .wrap input {{
     border: 1.5px solid var(--ios-separator) !important;
     border-radius: 10px !important;
     padding: 10px 14px !important;
@@ -180,17 +281,16 @@ IOS_CSS = """
     font-size: 15px !important;
     background: var(--ios-bg) !important;
     transition: border-color 0.2s ease !important;
-}
-
+}}
 .ios-card input[type="text"]:focus,
-.ios-card textarea:focus {
+.ios-card textarea:focus {{
     border-color: var(--ios-blue) !important;
     outline: none !important;
     box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12) !important;
-}
+}}
 
 /* ═══ Buttons ═══ */
-.ios-btn-primary button {
+.ios-btn-primary button {{
     background: var(--ios-blue) !important;
     color: white !important;
     border: none !important;
@@ -203,18 +303,15 @@ IOS_CSS = """
     cursor: pointer !important;
     transition: all 0.15s ease !important;
     width: 100% !important;
-}
-
-.ios-btn-primary button:hover {
+}}
+.ios-btn-primary button:hover {{
     background: var(--ios-blue-hover) !important;
     transform: scale(0.98) !important;
-}
-
-.ios-btn-primary button:active {
+}}
+.ios-btn-primary button:active {{
     transform: scale(0.96) !important;
-}
-
-.ios-btn-secondary button {
+}}
+.ios-btn-secondary button {{
     background: rgba(0, 122, 255, 0.08) !important;
     color: var(--ios-blue) !important;
     border: none !important;
@@ -224,36 +321,29 @@ IOS_CSS = """
     font-weight: 600 !important;
     font-family: var(--ios-font) !important;
     transition: all 0.15s ease !important;
-}
-
-.ios-btn-secondary button:hover {
+}}
+.ios-btn-secondary button:hover {{
     background: rgba(0, 122, 255, 0.14) !important;
-}
+}}
 
-/* ═══ Sliders ═══ */
-input[type="range"] {
-    accent-color: var(--ios-blue) !important;
-}
+/* ═══ Sliders, dropdowns, checkbox ═══ */
+input[type="range"] {{ accent-color: var(--ios-blue) !important; }}
 
-/* ═══ Dropdowns ═══ */
-.ios-card select, .ios-card .wrap select {
+.ios-card select, .ios-card .wrap select {{
     border-radius: 10px !important;
     border: 1.5px solid var(--ios-separator) !important;
     padding: 8px 12px !important;
     background: var(--ios-bg) !important;
     font-family: var(--ios-font) !important;
-}
-
-/* ═══ Checkbox ═══ */
-.ios-card input[type="checkbox"] {
+}}
+.ios-card input[type="checkbox"] {{
     accent-color: var(--ios-blue) !important;
     width: 18px !important;
     height: 18px !important;
-    border-radius: 5px !important;
-}
+}}
 
 /* ═══ Status pill ═══ */
-.ios-status .prose {
+.ios-status .prose {{
     background: rgba(52, 199, 89, 0.1) !important;
     color: #248A3D !important;
     border-radius: 20px !important;
@@ -262,10 +352,10 @@ input[type="range"] {
     font-weight: 500 !important;
     text-align: center !important;
     display: inline-block !important;
-}
+}}
 
 /* ═══ Progress log ═══ */
-.ios-log textarea {
+.ios-log textarea {{
     background: #1C1C1E !important;
     color: #98989D !important;
     border-radius: var(--ios-radius-sm) !important;
@@ -274,85 +364,86 @@ input[type="range"] {
     font-size: 12px !important;
     padding: 14px !important;
     line-height: 1.6 !important;
-}
+}}
 
-/* ═══ Video player ═══ */
-.ios-card video {
-    border-radius: var(--ios-radius-sm) !important;
-}
+/* ═══ Video, table ═══ */
+.ios-card video {{ border-radius: var(--ios-radius-sm) !important; }}
 
-/* ═══ Dataframe / Table ═══ */
-.ios-card table {
+.ios-card table {{
     border-radius: var(--ios-radius-sm) !important;
     overflow: hidden !important;
     font-size: 13px !important;
-}
-
-.ios-card table th {
+}}
+.ios-card table th {{
     background: var(--ios-bg) !important;
     font-weight: 600 !important;
     font-size: 12px !important;
     text-transform: uppercase !important;
     letter-spacing: 0.03em !important;
     color: var(--ios-secondary) !important;
-}
+}}
 
-/* ═══ Accordion ═══ */
-.ios-card .accordion {
-    border: none !important;
-    background: transparent !important;
-}
+.ios-card .accordion {{ border: none !important; background: transparent !important; }}
 
-/* ═══ Step numbers ═══ */
-.ios-step-label {
-    display: inline-block;
+/* ═══ Step indicator ═══ */
+.ios-step-num {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--ios-blue);
     color: white;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    text-align: center;
-    line-height: 24px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
-    margin-right: 8px;
-}
+    flex-shrink: 0;
+}}
+
+/* ═══ Accordion icon ═══ */
+.ios-acc-icon {{
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 4px;
+    background-color: var(--ios-secondary);
+    -webkit-mask-image: url("{_ICON_LIGHTBULB}");
+    mask-image: url("{_ICON_LIGHTBULB}");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+}}
 
 /* ═══ Footer ═══ */
-.ios-footer {
+.ios-footer {{
     text-align: center;
     padding: 16px;
     font-size: 13px;
     color: var(--ios-tertiary);
-}
+}}
 
 /* ═══ Responsive ═══ */
-@media (max-width: 768px) {
-    .gradio-container {
-        padding: 0 8px !important;
-    }
-    .ios-genre-picker label {
-        min-width: 90px !important;
-        font-size: 13px !important;
-    }
-}
+@media (max-width: 768px) {{
+    .gradio-container {{ padding: 0 8px !important; }}
+    .ios-genre-picker label {{ min-width: 90px !important; font-size: 13px !important; }}
+}}
 """
 
 
 # ── helpers ─────────────────────────────────────────────────────────────
 
 def _genre_radio_choices() -> list[str]:
-    """Genre choices as 'id' values with emoji labels for Radio."""
+    """Plain text genre labels. Icons are added via CSS."""
     ids = genre_ids()
     return [GENRE_LABELS.get(gid, gid) for gid in ids]
 
 
 def _genre_id_from_label(label: str) -> str:
-    """Reverse-map an emoji label back to a genre id."""
+    """Reverse-map a label back to a genre id."""
     for gid, glabel in GENRE_LABELS.items():
         if glabel == label:
             return gid
-    return label  # fallback: the label IS the id
+    return label
 
 
 def _slugify(text):
@@ -375,7 +466,7 @@ def get_suggestions(genre_label):
     suggestions = suggest_topics(genre_id, limit=5)
     if not suggestions:
         return "No cached trends. Click refresh first."
-    return "\n".join(f"• {s}" for s in suggestions)
+    return "\n".join(f"- {s}" for s in suggestions)
 
 
 # ── Step 1: script generation ──────────────────────────────────────────
@@ -587,16 +678,20 @@ with gr.Blocks(title="AI Video Creator", css=IOS_CSS) as demo:
 
     # ══════════════ STEP 1: Genre & Topic ══════════════
     with gr.Group(elem_classes="ios-card"):
-        gr.HTML('<div class="ios-section-title"><span class="ios-step-label">1</span> Genre & Topic</div>')
+        gr.HTML(
+            '<div class="ios-section-title">'
+            '<span class="ios-step-num">1</span> Genre & Topic'
+            '</div>'
+        )
 
         genre_radio = gr.Radio(
             choices=_genre_radio_choices(),
-            value=GENRE_LABELS.get("drama_story", "drama_story"),
+            value=GENRE_LABELS.get("drama_story", "Drama"),
             label="Genre",
             elem_classes="ios-genre-picker",
         )
 
-        with gr.Accordion("💡 Trending topic ideas", open=False):
+        with gr.Accordion("Trending topic ideas", open=False):
             with gr.Row():
                 trends_box = gr.Markdown("No cached trends. Click refresh.")
                 btn_trends = gr.Button("Refresh", elem_classes="ios-btn-secondary", scale=0)
@@ -630,17 +725,18 @@ with gr.Blocks(title="AI Video Creator", css=IOS_CSS) as demo:
 
         gr.HTML('<div style="height: 4px;"></div>')
         btn_script = gr.Button(
-            "Write Script",
-            variant="primary",
-            elem_classes="ios-btn-primary",
+            "Write Script", variant="primary", elem_classes="ios-btn-primary",
         )
 
     # ══════════════ STEP 2: Review & Edit ══════════════
     with gr.Group(elem_classes="ios-card"):
-        gr.HTML('<div class="ios-section-title"><span class="ios-step-label">2</span> Review & Edit Script</div>')
+        gr.HTML(
+            '<div class="ios-section-title">'
+            '<span class="ios-step-num">2</span> Review & Edit Script'
+            '</div>'
+        )
 
         status = gr.Markdown("", elem_classes="ios-status")
-
         vid_title = gr.Textbox(label="Title", interactive=True)
 
         with gr.Row():
@@ -660,41 +756,36 @@ with gr.Blocks(title="AI Video Creator", css=IOS_CSS) as demo:
 
         with gr.Row():
             speed = gr.Slider(0.7, 1.2, value=0.85, step=0.05, label="Voice speed")
-            res = gr.Dropdown(
-                list(RESOLUTIONS), value="720p (faster)", label="Resolution",
-            )
+            res = gr.Dropdown(list(RESOLUTIONS), value="720p (faster)", label="Resolution")
             seed = gr.Number(value=1234, precision=0, label="Image seed")
 
         gr.HTML('<div style="height: 4px;"></div>')
         btn_make = gr.Button(
-            "Make Video",
-            variant="primary",
-            elem_classes="ios-btn-primary",
+            "Make Video", variant="primary", elem_classes="ios-btn-primary",
         )
 
     # ══════════════ STEP 3: Result ══════════════
     with gr.Group(elem_classes="ios-card"):
-        gr.HTML('<div class="ios-section-title"><span class="ios-step-label">3</span> Result</div>')
-
+        gr.HTML(
+            '<div class="ios-section-title">'
+            '<span class="ios-step-num">3</span> Result'
+            '</div>'
+        )
         log_box = gr.Textbox(
-            label="Progress",
-            lines=10, max_lines=14,
-            interactive=False,
-            elem_classes="ios-log",
+            label="Progress", lines=10, max_lines=14,
+            interactive=False, elem_classes="ios-log",
         )
         video = gr.Video(label="Finished video")
 
     # ── Footer ──
     gr.HTML("""
         <div class="ios-footer">
-            Each video folder includes: thumbnail.png · metadata.json · scene images & audio
+            Each video folder includes thumbnail.png, metadata.json, and individual scene assets.
         </div>
     """)
 
     # ── Event wiring ──
-    genre_radio.change(
-        on_genre_change, [genre_radio], [speed, n_scenes, age, trends_box],
-    )
+    genre_radio.change(on_genre_change, [genre_radio], [speed, n_scenes, age, trends_box])
     genre_radio.change(get_suggestions, [genre_radio], trends_box)
 
     btn_script.click(
