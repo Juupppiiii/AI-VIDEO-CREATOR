@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
 Gradio web UI for the multi-genre video production pipeline.
-iOS-inspired design with clean cards, soft shadows, and SVG icons.
+Clean, minimal design inspired by Apple and Ultron dashboard.
 
 Run:  python server/app/main.py   (opens at http://127.0.0.1:7860)
 """
 import json
 import os
 import queue
+import re
+import shutil
 import sys
 import threading
 import time
@@ -30,465 +32,290 @@ from pipeline.images import generate_images, set_logger as set_img_log
 from pipeline.voice import generate_voice, set_logger as set_voice_log
 from pipeline.assembler import assemble, set_logger as set_asm_log
 from genres.loader import load_genre, list_genres, genre_ids
-from trends.fetcher import (
-    update_trends, get_cached_trends, suggest_topics, cache_age_hours,
-)
+from trends.fetcher import update_trends, suggest_topics, cache_age_hours
+import requests as _requests
 
 # ── constants ───────────────────────────────────────────────────────────
 RESOLUTIONS = {"720p (faster)": (1280, 720), "1080p (slower)": (1920, 1080)}
 HEADERS = ["Narration", "Image prompt", "Speaker", "Mood"]
 
-# Clean text labels — SVG icons are added purely via CSS
-GENRE_LABELS = {
+GENRE_MAP = {
     "drama_story":      "Drama",
-    "kids_educational":  "Kids",
-    "trivia_quiz":       "Trivia",
     "horror_story":      "Horror",
+    "kids_educational":  "Kids",
     "motivational":      "Motivational",
     "mystery":           "Mystery",
+    "trivia_quiz":       "Trivia",
+}
+LABEL_TO_ID = {v: k for k, v in GENRE_MAP.items()}
+
+
+# ── clean design CSS (Inter font, ultron-inspired tokens) ───────────────
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg: #ffffff;
+    --surface: #fafafa;
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+    --text: #111827;
+    --text-2: #6b7280;
+    --text-3: #9ca3af;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-subtle: #eff6ff;
+    --success: #15803d;
+    --success-subtle: #f0fdf4;
+    --danger: #b91c1c;
+    --danger-subtle: #fef2f2;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+    --font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-# ── SVG icon data URIs (Lucide-style, stroke-only, 18px) ───────────────
-# Encoded for use as CSS mask-image. Icons inherit text color via mask.
-_ICON_DRAMA = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Crect x='2' y='2' width='20' height='20' rx='2'/%3E"
-    "%3Cpath d='M7 2v4M12 2v4M17 2v4'/%3E"
-    "%3Cline x1='2' y1='8' x2='22' y2='8'/%3E%3C/svg%3E"
-)
-_ICON_HORROR = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Cpath d='M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z'/%3E%3C/svg%3E"
-)
-_ICON_KIDS = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Cpath d='M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2V3z'/%3E"
-    "%3Cpath d='M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7V3z'/%3E%3C/svg%3E"
-)
-_ICON_MOTIVATIONAL = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Cpolyline points='23 6 13.5 15.5 8.5 10.5 1 18'/%3E"
-    "%3Cpolyline points='17 6 23 6 23 12'/%3E%3C/svg%3E"
-)
-_ICON_MYSTERY = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Ccircle cx='11' cy='11' r='8'/%3E"
-    "%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"
-)
-_ICON_TRIVIA = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' "
-    "height='18' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Ccircle cx='12' cy='12' r='10'/%3E"
-    "%3Cpath d='M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3'/%3E"
-    "%3Cline x1='12' y1='17' x2='12.01' y2='17'/%3E%3C/svg%3E"
-)
-# Lightbulb for the trends accordion
-_ICON_LIGHTBULB = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' "
-    "height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'%3E"
-    "%3Cpath d='M9 18h6M10 22h4'/%3E"
-    "%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A7 7 0 1012 2a7 7 0 00-4.5 "
-    "12.5c.76.76 1.23 1.52 1.41 2.5'/%3E%3C/svg%3E"
-)
-
-
-# ── iOS-inspired CSS ────────────────────────────────────────────────────
-IOS_CSS = f"""
-/* ═══ iOS Design System ═══ */
-
-:root {{
-    --ios-blue: #007AFF;
-    --ios-blue-hover: #0066D6;
-    --ios-green: #34C759;
-    --ios-red: #FF3B30;
-    --ios-bg: #F2F2F7;
-    --ios-card: #FFFFFF;
-    --ios-text: #1C1C1E;
-    --ios-secondary: #8E8E93;
-    --ios-tertiary: #AEAEB2;
-    --ios-separator: rgba(60, 60, 67, 0.1);
-    --ios-radius: 16px;
-    --ios-radius-sm: 12px;
-    --ios-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
-    --ios-shadow-hover: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
-    --ios-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-                "Helvetica Neue", Arial, sans-serif;
-}}
-
-/* Base container */
-.gradio-container {{
-    font-family: var(--ios-font) !important;
-    background: var(--ios-bg) !important;
-    max-width: 900px !important;
+/* Base */
+.gradio-container {
+    font-family: var(--font) !important;
+    background: var(--surface) !important;
+    max-width: 920px !important;
     margin: 0 auto !important;
-}}
+    -webkit-font-smoothing: antialiased !important;
+}
+.block, .form { border: none !important; }
 
-.block, .form, .wrap {{
-    border: none !important;
-}}
-
-/* ═══ Header ═══ */
-.ios-header {{
-    text-align: center;
-    padding: 28px 16px 12px;
-}}
-.ios-header h1 {{
-    font-size: 28px !important;
-    font-weight: 700 !important;
-    color: var(--ios-text) !important;
-    letter-spacing: -0.02em !important;
-    margin: 0 0 4px 0 !important;
-}}
-.ios-header p {{
-    font-size: 15px !important;
-    color: var(--ios-secondary) !important;
+/* ── Header ── */
+.app-header { padding: 32px 4px 20px; }
+.app-header h1 {
+    font-size: 26px !important; font-weight: 700 !important;
+    color: var(--text) !important; letter-spacing: -0.03em !important;
     margin: 0 !important;
-    font-weight: 400 !important;
-}}
+}
+.app-header p {
+    font-size: 14px !important; color: var(--text-2) !important;
+    margin: 4px 0 0 !important;
+}
 
-/* ═══ Cards ═══ */
-.ios-card {{
-    background: var(--ios-card) !important;
-    border-radius: var(--ios-radius) !important;
-    box-shadow: var(--ios-shadow) !important;
-    border: none !important;
-    padding: 20px 20px 16px !important;
-    margin-bottom: 12px !important;
-}}
-.ios-card .label-wrap {{
-    margin-bottom: 4px !important;
-}}
+/* ── Panels (ultron-style cards) ── */
+.panel {
+    background: var(--bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow) !important;
+    padding: 22px !important;
+    margin-bottom: 14px !important;
+}
+.panel-title {
+    font-size: 11px !important; font-weight: 600 !important;
+    color: var(--text-3) !important; text-transform: uppercase !important;
+    letter-spacing: 0.06em !important; margin-bottom: 14px !important;
+}
 
-/* Section titles */
-.ios-section-title {{
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    color: var(--ios-secondary) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    padding: 0 4px !important;
-    margin-bottom: 8px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-}}
-
-/* ═══ Genre Radio — card pills with SVG icons ═══ */
-.ios-genre-picker .wrap {{
-    gap: 8px !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-}}
-.ios-genre-picker label {{
-    background: var(--ios-card) !important;
-    border: 2px solid var(--ios-separator) !important;
-    border-radius: var(--ios-radius-sm) !important;
-    padding: 10px 16px !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    color: var(--ios-text) !important;
+/* ── Genre selector ── */
+.genre-select .wrap {
+    gap: 6px !important; flex-wrap: wrap !important;
+}
+.genre-select label {
+    background: var(--bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    padding: 8px 16px !important;
+    font-size: 13px !important; font-weight: 500 !important;
+    color: var(--text) !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-    min-width: 110px !important;
+    transition: all 150ms ease !important;
+    min-width: 88px !important;
     text-align: center !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 6px !important;
-}}
-.ios-genre-picker label:hover {{
-    box-shadow: var(--ios-shadow-hover) !important;
-    transform: translateY(-1px) !important;
-    border-color: var(--ios-tertiary) !important;
-}}
-.ios-genre-picker label.selected {{
-    border-color: var(--ios-blue) !important;
-    background: rgba(0, 122, 255, 0.05) !important;
-    color: var(--ios-blue) !important;
+}
+.genre-select label:hover {
+    border-color: var(--accent) !important;
+    background: var(--accent-subtle) !important;
+}
+.genre-select label.selected {
+    border-color: var(--accent) !important;
+    background: var(--accent-subtle) !important;
+    color: var(--accent) !important;
     font-weight: 600 !important;
-}}
-.ios-genre-picker .label-wrap {{
-    display: none !important;
-}}
+}
+.genre-select .label-wrap { display: none !important; }
 
-/* ─── Inline SVG icons via CSS mask (inherit text color) ─── */
-.ios-genre-picker label::before {{
-    content: '';
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    background-color: currentColor;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
-    opacity: 0.7;
-}}
-.ios-genre-picker label.selected::before {{
-    opacity: 1;
-}}
-
-/* Genre order: drama, horror, kids, motivational, mystery, trivia */
-.ios-genre-picker label:nth-child(1)::before {{
-    -webkit-mask-image: url("{_ICON_DRAMA}");
-    mask-image: url("{_ICON_DRAMA}");
-}}
-.ios-genre-picker label:nth-child(2)::before {{
-    -webkit-mask-image: url("{_ICON_HORROR}");
-    mask-image: url("{_ICON_HORROR}");
-}}
-.ios-genre-picker label:nth-child(3)::before {{
-    -webkit-mask-image: url("{_ICON_KIDS}");
-    mask-image: url("{_ICON_KIDS}");
-}}
-.ios-genre-picker label:nth-child(4)::before {{
-    -webkit-mask-image: url("{_ICON_MOTIVATIONAL}");
-    mask-image: url("{_ICON_MOTIVATIONAL}");
-}}
-.ios-genre-picker label:nth-child(5)::before {{
-    -webkit-mask-image: url("{_ICON_MYSTERY}");
-    mask-image: url("{_ICON_MYSTERY}");
-}}
-.ios-genre-picker label:nth-child(6)::before {{
-    -webkit-mask-image: url("{_ICON_TRIVIA}");
-    mask-image: url("{_ICON_TRIVIA}");
-}}
-
-/* ═══ Inputs ═══ */
-.ios-card input[type="text"],
-.ios-card textarea,
-.ios-card .wrap input {{
-    border: 1.5px solid var(--ios-separator) !important;
-    border-radius: 10px !important;
-    padding: 10px 14px !important;
-    font-family: var(--ios-font) !important;
-    font-size: 15px !important;
-    background: var(--ios-bg) !important;
-    transition: border-color 0.2s ease !important;
-}}
-.ios-card input[type="text"]:focus,
-.ios-card textarea:focus {{
-    border-color: var(--ios-blue) !important;
+/* ── Inputs ── */
+.panel input[type="text"], .panel textarea {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    padding: 9px 12px !important;
+    font-family: var(--font) !important;
+    font-size: 14px !important;
+    background: var(--bg) !important;
+    transition: border-color 150ms !important;
+}
+.panel input:focus, .panel textarea:focus {
+    border-color: var(--accent) !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12) !important;
-}}
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
 
-/* ═══ Buttons ═══ */
-.ios-btn-primary button {{
-    background: var(--ios-blue) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: var(--ios-radius-sm) !important;
-    padding: 12px 28px !important;
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    font-family: var(--ios-font) !important;
-    letter-spacing: -0.01em !important;
-    cursor: pointer !important;
-    transition: all 0.15s ease !important;
+/* ── Buttons ── */
+.btn-primary button {
+    background: var(--accent) !important; color: white !important;
+    border: none !important; border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-size: 14px !important; font-weight: 600 !important;
+    font-family: var(--font) !important;
     width: 100% !important;
-}}
-.ios-btn-primary button:hover {{
-    background: var(--ios-blue-hover) !important;
-    transform: scale(0.98) !important;
-}}
-.ios-btn-primary button:active {{
-    transform: scale(0.96) !important;
-}}
-.ios-btn-secondary button {{
-    background: rgba(0, 122, 255, 0.08) !important;
-    color: var(--ios-blue) !important;
-    border: none !important;
-    border-radius: 10px !important;
-    padding: 8px 16px !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    font-family: var(--ios-font) !important;
-    transition: all 0.15s ease !important;
-}}
-.ios-btn-secondary button:hover {{
-    background: rgba(0, 122, 255, 0.14) !important;
-}}
+    transition: background 150ms !important;
+}
+.btn-primary button:hover { background: var(--accent-hover) !important; }
+.btn-ghost button {
+    background: transparent !important; color: var(--accent) !important;
+    border: none !important; padding: 6px 12px !important;
+    font-size: 13px !important; font-weight: 600 !important;
+    font-family: var(--font) !important;
+}
+.btn-ghost button:hover { background: var(--accent-subtle) !important; border-radius: 6px !important; }
 
-/* ═══ Sliders, dropdowns, checkbox ═══ */
-input[type="range"] {{ accent-color: var(--ios-blue) !important; }}
-
-.ios-card select, .ios-card .wrap select {{
-    border-radius: 10px !important;
-    border: 1.5px solid var(--ios-separator) !important;
-    padding: 8px 12px !important;
-    background: var(--ios-bg) !important;
-    font-family: var(--ios-font) !important;
-}}
-.ios-card input[type="checkbox"] {{
-    accent-color: var(--ios-blue) !important;
-    width: 18px !important;
-    height: 18px !important;
-}}
-
-/* ═══ Status pill ═══ */
-.ios-status .prose {{
-    background: rgba(52, 199, 89, 0.1) !important;
-    color: #248A3D !important;
-    border-radius: 20px !important;
-    padding: 8px 16px !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    text-align: center !important;
+/* ── Status badge ── */
+.status-badge .prose {
     display: inline-block !important;
-}}
+    background: var(--success-subtle) !important;
+    color: var(--success) !important;
+    border-radius: 999px !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important; font-weight: 500 !important;
+}
 
-/* ═══ Progress log ═══ */
-.ios-log textarea {{
-    background: #1C1C1E !important;
-    color: #98989D !important;
-    border-radius: var(--ios-radius-sm) !important;
-    border: none !important;
-    font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace !important;
-    font-size: 12px !important;
-    padding: 14px !important;
-    line-height: 1.6 !important;
-}}
-
-/* ═══ Video, table ═══ */
-.ios-card video {{ border-radius: var(--ios-radius-sm) !important; }}
-
-.ios-card table {{
-    border-radius: var(--ios-radius-sm) !important;
-    overflow: hidden !important;
+/* ── Suggestions box ── */
+.suggestions-box {
+    background: var(--accent-subtle) !important;
+    border: 1px solid #bfdbfe !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
     font-size: 13px !important;
-}}
-.ios-card table th {{
-    background: var(--ios-bg) !important;
-    font-weight: 600 !important;
-    font-size: 12px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.03em !important;
-    color: var(--ios-secondary) !important;
-}}
+    color: var(--text) !important;
+    margin-bottom: 8px !important;
+}
+.suggestions-box .prose { font-size: 13px !important; line-height: 1.7 !important; }
+.suggestions-label {
+    font-size: 11px !important; font-weight: 600 !important;
+    color: var(--accent) !important; text-transform: uppercase !important;
+    letter-spacing: 0.04em !important; margin-bottom: 6px !important;
+}
 
-.ios-card .accordion {{ border: none !important; background: transparent !important; }}
+/* ── Log console ── */
+.console textarea {
+    background: #111827 !important; color: #9ca3af !important;
+    border: none !important; border-radius: 8px !important;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace !important;
+    font-size: 12px !important; padding: 14px !important;
+    line-height: 1.6 !important;
+}
 
-/* ═══ Step indicator ═══ */
-.ios-step-num {{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--ios-blue);
-    color: white;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    font-size: 12px;
-    font-weight: 700;
-    flex-shrink: 0;
-}}
+/* ── Table ── */
+.panel table { font-size: 13px !important; border-radius: 8px !important; overflow: hidden !important; }
+.panel table th {
+    background: var(--surface) !important;
+    font-size: 11px !important; font-weight: 600 !important;
+    text-transform: uppercase !important; letter-spacing: 0.04em !important;
+    color: var(--text-3) !important;
+}
 
-/* ═══ Accordion icon ═══ */
-.ios-acc-icon {{
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
-    margin-right: 4px;
-    background-color: var(--ios-secondary);
-    -webkit-mask-image: url("{_ICON_LIGHTBULB}");
-    mask-image: url("{_ICON_LIGHTBULB}");
-    -webkit-mask-size: contain;
-    mask-size: contain;
-}}
+/* ── Sliders / checkboxes ── */
+input[type="range"] { accent-color: var(--accent) !important; }
+input[type="checkbox"] { accent-color: var(--accent) !important; }
 
-/* ═══ Footer ═══ */
-.ios-footer {{
-    text-align: center;
-    padding: 16px;
-    font-size: 13px;
-    color: var(--ios-tertiary);
-}}
+/* ── Video ── */
+.panel video { border-radius: 8px !important; }
 
-/* ═══ Responsive ═══ */
-@media (max-width: 768px) {{
-    .gradio-container {{ padding: 0 8px !important; }}
-    .ios-genre-picker label {{ min-width: 90px !important; font-size: 13px !important; }}
-}}
+/* ── Accordion ── */
+.panel .accordion { border: none !important; background: transparent !important; }
+
+/* ── Footer ── */
+.app-footer { text-align: center; padding: 20px 0; color: var(--text-3); font-size: 12px; }
+
+/* ── Tabs ── */
+.tabs > .tab-nav > button {
+    font-family: var(--font) !important;
+    font-size: 14px !important; font-weight: 500 !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+.tabs > .tab-nav > button.selected {
+    font-weight: 600 !important; color: var(--accent) !important;
+}
 """
 
 
 # ── helpers ─────────────────────────────────────────────────────────────
 
-def _genre_radio_choices() -> list[str]:
-    """Plain text genre labels. Icons are added via CSS."""
-    ids = genre_ids()
-    return [GENRE_LABELS.get(gid, gid) for gid in ids]
+def _genre_choices():
+    return [GENRE_MAP.get(gid, gid) for gid in genre_ids()]
 
-
-def _genre_id_from_label(label: str) -> str:
-    """Reverse-map a label back to a genre id."""
-    for gid, glabel in GENRE_LABELS.items():
-        if glabel == label:
-            return gid
-    return label
-
+def _to_id(label):
+    return LABEL_TO_ID.get(label, label)
 
 def _slugify(text):
-    import re
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "video"
 
+def _check_ollama():
+    """Quick check if Ollama is reachable."""
+    try:
+        r = _requests.get(
+            config.OLLAMA_URL.replace("/api/chat", ""), timeout=3,
+        )
+        return r.status_code == 200
+    except Exception:
+        return False
 
-# ── Step 0: trend suggestions ──────────────────────────────────────────
+
+# ── Trends ──────────────────────────────────────────────────────────────
 
 def refresh_trends():
     try:
         update_trends()
-        return "Trends updated."
+        return "Trends refreshed."
     except Exception as exc:
         return f"Could not fetch trends: {exc}"
 
-
-def get_suggestions(genre_label):
-    genre_id = _genre_id_from_label(genre_label)
-    suggestions = suggest_topics(genre_id, limit=5)
+def get_trend_suggestions(genre_label):
+    gid = _to_id(genre_label) if genre_label else "drama_story"
+    suggestions = suggest_topics(gid, limit=5)
     if not suggestions:
-        return "No cached trends. Click refresh first."
+        age = cache_age_hours()
+        if age is None:
+            return "No trend data cached yet. Click **Refresh** (needs internet)."
+        return f"Trend cache is {age:.0f}h old. Click **Refresh** to update."
     return "\n".join(f"- {s}" for s in suggestions)
 
 
-# ── Step 1: script generation ──────────────────────────────────────────
+# ── Step 1: Write script ───────────────────────────────────────────────
 
 def write_script(genre_label, topic, age, n_scenes, model, do_refine):
     topic = (topic or "").strip()
     if not topic:
-        raise gr.Error("Please type a topic first.")
+        raise gr.Error("Enter a topic or premise first.")
 
-    genre_id = _genre_id_from_label(genre_label)
+    if not _check_ollama():
+        raise gr.Error(
+            "Cannot reach Ollama. Make sure 'ollama serve' is running "
+            "and the model is pulled."
+        )
+
+    gid = _to_id(genre_label or "Drama")
     try:
-        genre = load_genre(genre_id)
+        genre = load_genre(gid)
     except FileNotFoundError:
-        raise gr.Error(f"Unknown genre: {genre_id}")
+        raise gr.Error(f"Genre not found: {gid}. Available: {', '.join(genre_ids())}")
 
-    config.OLLAMA_MODEL = model
-    outdir = config.OUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}-{genre_id}-{_slugify(topic)}"
+    config.OLLAMA_MODEL = model or config.OLLAMA_MODEL
+    outdir = config.OUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}-{gid}-{_slugify(topic)}"
     outdir.mkdir(parents=True, exist_ok=True)
 
     try:
         script = generate_script(
-            topic, genre, n_scenes=int(n_scenes), age=age, refine=do_refine,
+            topic, genre,
+            n_scenes=int(n_scenes or genre.get("target_scenes", 7)),
+            age=age if age != "general" else None,
+            refine=bool(do_refine),
         )
     except SystemExit as exc:
         raise gr.Error(str(exc))
@@ -496,7 +323,7 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine):
         raise gr.Error(f"Script generation failed: {exc}")
 
     (outdir / "script.json").write_text(
-        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8",
     )
 
     rows = [
@@ -504,56 +331,51 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine):
         for s in script["scenes"]
     ]
 
-    refined_note = " (refined)" if do_refine else ""
-    status_msg = f"Script ready{refined_note} — {len(rows)} scenes. Review and edit below, then render."
-
+    note = " (refined)" if do_refine else ""
     return (
         script.get("title", topic),
         script.get("description", ""),
         ", ".join(script.get("tags", [])),
         rows,
         str(outdir),
-        status_msg,
+        f"Script ready{note} — {len(rows)} scenes",
     )
 
 
-# ── Step 2: render ─────────────────────────────────────────────────────
+# ── Step 2: Render video ──────────────────────────────────────────────
 
-def make_video(genre_label, outdir, title, description, tags, table, speed, res, seed):
+def render_video(genre_label, outdir, title, desc, tags, table, speed, res, seed):
     if not outdir:
         raise gr.Error("Generate a script first.")
 
-    genre_id = _genre_id_from_label(genre_label)
+    gid = _to_id(genre_label or "Drama")
     try:
-        genre = load_genre(genre_id)
+        genre = load_genre(gid)
     except FileNotFoundError:
-        raise gr.Error(f"Unknown genre: {genre_id}")
+        raise gr.Error(f"Genre not found: {gid}")
 
     rows = table.values.tolist() if hasattr(table, "values") else table
     scenes = []
     for row in rows:
-        narration = (row[0] or "").strip()
-        prompt = (row[1] or "").strip() or narration
-        speaker = (row[2] or "").strip() or "narrator"
-        mood = (row[3] or "").strip() or "neutral"
-        if narration:
-            scenes.append({
-                "narration": narration,
-                "image_prompt": prompt,
-                "speaker": speaker,
-                "mood": mood,
-            })
-    if len(scenes) < 1:
-        raise gr.Error("The script table is empty.")
+        narr = (row[0] or "").strip()
+        if not narr:
+            continue
+        scenes.append({
+            "narration": narr,
+            "image_prompt": (row[1] or "").strip() or narr,
+            "speaker": (row[2] or "").strip() or "narrator",
+            "mood": (row[3] or "").strip() or "neutral",
+        })
+    if not scenes:
+        raise gr.Error("No scenes in the script table.")
 
     outdir = Path(outdir)
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
-    script = {"title": title, "description": description, "tags": tag_list, "scenes": scenes}
+    script = {"title": title, "description": desc, "tags": tag_list, "scenes": scenes}
     (outdir / "script.json").write_text(
-        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8",
     )
-
-    config.OUT_W, config.OUT_H = RESOLUTIONS[res]
+    config.OUT_W, config.OUT_H = RESOLUTIONS.get(res, (1280, 720))
 
     q: queue.Queue = queue.Queue()
     import pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler
@@ -564,53 +386,44 @@ def make_video(genre_label, outdir, title, description, tags, table, speed, res,
 
     for mod in (pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler):
         mod.set_logger(tee)
+    try:
+        from pipeline.sfx import set_logger as sfx_log; sfx_log(tee)
+    except Exception: pass
+    try:
+        from pipeline.thumbnail import set_logger as thumb_log; thumb_log(tee)
+    except Exception: pass
 
-    result: dict = {}
+    result = {}
 
     def work():
         try:
-            try:
-                from pipeline.sfx import set_logger as set_sfx_log
-                set_sfx_log(tee)
-            except Exception:
-                pass
-            try:
-                from pipeline.thumbnail import set_logger as set_thumb_log
-                set_thumb_log(tee)
-            except Exception:
-                pass
-
             imgs = generate_images(scenes, genre, outdir, int(seed))
             auds, durs = generate_voice(scenes, genre, outdir, float(speed))
-            result["final"] = assemble(
-                scenes, imgs, auds, durs, genre, outdir, title=title,
-            )
+            result["final"] = assemble(scenes, imgs, auds, durs, genre, outdir, title=title)
 
             if config.GENERATE_THUMBNAIL and imgs:
                 try:
                     from pipeline.thumbnail import generate_thumbnail
-                    best_img = imgs[min(1, len(imgs) - 1)]
-                    raw_name = best_img.stem.removesuffix("_up") + best_img.suffix
-                    raw = best_img.with_name(raw_name)
-                    if raw.exists() and raw != best_img:
-                        best_img = raw
-                    generate_thumbnail(title, best_img, genre_id, outdir)
-                except Exception as exc:
-                    q.put(f"Thumbnail skipped: {exc}")
+                    best = imgs[min(1, len(imgs) - 1)]
+                    raw_name = best.stem.removesuffix("_up") + best.suffix
+                    raw = best.with_name(raw_name)
+                    if raw.exists() and raw != best: best = raw
+                    generate_thumbnail(title, best, gid, outdir)
+                except Exception as e:
+                    q.put(f"Thumbnail skipped: {e}")
 
             meta = {
                 "title": title,
-                "description": (description or "").strip()
-                    + "\n\nThis video was created with the help of AI tools.",
+                "description": (desc or "").strip() + "\n\nCreated with AI Video Creator.",
                 "tags": tag_list,
                 "genre": genre.get("name", ""),
                 "madeForKids": genre.get("made_for_kids", False),
                 "containsSyntheticMedia": True,
             }
             (outdir / "metadata.json").write_text(
-                json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
+                json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8",
             )
-            q.put(f"DONE -> {outdir / 'final.mp4'}")
+            q.put(f"Done — {outdir / 'final.mp4'}")
         except BaseException:
             result["error"] = traceback.format_exc()
             q.put("ERROR:\n" + result["error"])
@@ -626,177 +439,228 @@ def make_video(genre_label, outdir, title, description, tags, table, speed, res,
             try:
                 msg = q.get(timeout=300)
             except queue.Empty:
-                lines.append("Timed out waiting for the render thread.")
-                break
-            if msg is None:
-                break
+                lines.append("Timed out."); break
+            if msg is None: break
             lines.append(msg)
             yield "\n".join(lines), None
     finally:
         for mod in (pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler):
             mod.set_logger(print)
 
-    video = str(result["final"]) if "final" in result else None
-    yield "\n".join(lines), video
+    yield "\n".join(lines), str(result["final"]) if "final" in result else None
 
 
-# ── Genre change handler ───────────────────────────────────────────────
+# ── YouTube clipper ────────────────────────────────────────────────────
+
+def clip_youtube(url, n_clips, clip_dur, model):
+    url = (url or "").strip()
+    if not url:
+        raise gr.Error("Paste a YouTube URL first.")
+
+    from pipeline.youtube import check_ytdlp, process_youtube, set_logger
+    if not check_ytdlp():
+        raise gr.Error("yt-dlp not found. Install with: pip install yt-dlp")
+    if not _check_ollama():
+        raise gr.Error("Ollama not reachable. Run 'ollama serve' first.")
+
+    q: queue.Queue = queue.Queue()
+
+    def tee(msg):
+        print(msg, flush=True)
+        q.put(msg)
+
+    set_logger(tee)
+    result = {}
+
+    def work():
+        try:
+            final, outdir = process_youtube(
+                url, n_clips=int(n_clips), clip_duration=int(clip_dur),
+                model=model or None,
+            )
+            result["final"] = final
+            q.put(f"Done — {final}")
+        except BaseException:
+            result["error"] = traceback.format_exc()
+            q.put("ERROR:\n" + result["error"])
+        finally:
+            q.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    lines = ["Starting YouTube clip pipeline..."]
+    yield "\n".join(lines), None
+    try:
+        while True:
+            try:
+                msg = q.get(timeout=300)
+            except queue.Empty:
+                lines.append("Timed out."); break
+            if msg is None: break
+            lines.append(msg)
+            yield "\n".join(lines), None
+    finally:
+        pass
+
+    yield "\n".join(lines), str(result["final"]) if "final" in result else None
+
+
+# ── Genre change handler ──────────────────────────────────────────────
 
 def on_genre_change(genre_label):
-    genre_id = _genre_id_from_label(genre_label)
+    gid = _to_id(genre_label or "Drama")
     try:
-        genre = load_genre(genre_id)
+        genre = load_genre(gid)
     except FileNotFoundError:
         return gr.update(), gr.update(), gr.update(), gr.update()
 
-    speed = genre.get("voice_speed", 0.9)
-    scenes = genre.get("target_scenes", 7)
-    has_age = "age_options" in genre
-    age_choices = genre.get("age_options", ["general"])
-    default_age = genre.get("default_age", "general")
-
     return (
-        gr.update(value=speed),
-        gr.update(value=scenes),
-        gr.update(visible=has_age, choices=age_choices, value=default_age),
-        gr.update(value=get_suggestions(genre_label)),
+        gr.update(value=genre.get("voice_speed", 0.9)),
+        gr.update(value=genre.get("target_scenes", 7)),
+        gr.update(
+            visible="age_options" in genre,
+            choices=genre.get("age_options", ["general"]),
+            value=genre.get("default_age", "general"),
+        ),
+        get_trend_suggestions(genre_label),
     )
 
 
-# ── Gradio UI (iOS-inspired) ──────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════
+# Gradio UI
+# ════════════════════════════════════════════════════════════════════════
 
-with gr.Blocks(title="AI Video Creator", css=IOS_CSS) as demo:
+with gr.Blocks(title="AI Video Creator", css=CSS) as demo:
     outdir_state = gr.State("")
 
-    # ── Header ──
-    gr.HTML("""
-        <div class="ios-header">
-            <h1>AI Video Creator</h1>
-            <p>Choose a genre, enter a topic, and create a video — all locally on your GPU.</p>
-        </div>
-    """)
+    gr.HTML(
+        '<div class="app-header">'
+        '<h1>AI Video Creator</h1>'
+        '<p>Generate videos from a topic or clip highlights from YouTube. '
+        'Everything runs locally on your GPU.</p>'
+        '</div>'
+    )
 
-    # ══════════════ STEP 1: Genre & Topic ══════════════
-    with gr.Group(elem_classes="ios-card"):
-        gr.HTML(
-            '<div class="ios-section-title">'
-            '<span class="ios-step-num">1</span> Genre & Topic'
-            '</div>'
-        )
+    with gr.Tabs():
 
-        genre_radio = gr.Radio(
-            choices=_genre_radio_choices(),
-            value=GENRE_LABELS.get("drama_story", "Drama"),
-            label="Genre",
-            elem_classes="ios-genre-picker",
-        )
+        # ═══════════════ TAB 1: Create Video ═══════════════
+        with gr.TabItem("Create Video"):
 
-        with gr.Accordion("Trending topic ideas", open=False):
-            with gr.Row():
-                trends_box = gr.Markdown("No cached trends. Click refresh.")
-                btn_trends = gr.Button("Refresh", elem_classes="ios-btn-secondary", scale=0)
-            btn_trends.click(refresh_trends, outputs=trends_box)
+            # ── Genre & Topic ──
+            with gr.Group(elem_classes="panel"):
+                gr.HTML('<div class="panel-title">Genre & Topic</div>')
 
-        topic = gr.Textbox(
-            label="Topic / Premise",
-            placeholder="A mother discovers her son has been lying for years...",
-            lines=2,
-            max_lines=4,
-        )
+                genre_radio = gr.Radio(
+                    choices=_genre_choices(),
+                    value="Drama",
+                    label="Genre",
+                    elem_classes="genre-select",
+                )
 
-        age = gr.Dropdown(
-            ["general"], value="general", label="Age group", visible=False,
-        )
+                # Trend suggestions (always visible)
+                gr.HTML('<div class="suggestions-label">Suggested topics</div>')
+                trends_box = gr.Markdown(
+                    get_trend_suggestions("Drama"),
+                    elem_classes="suggestions-box",
+                )
+                btn_trends = gr.Button(
+                    "Refresh trends", elem_classes="btn-ghost", size="sm",
+                )
 
-        with gr.Row():
-            n_scenes = gr.Slider(3, 12, value=8, step=1, label="Scenes")
-            model = gr.Dropdown(
-                ["qwen2.5:7b", "llama3.2:3b"],
-                value=config.OLLAMA_MODEL,
-                label="Model",
-                allow_custom_value=True,
-                scale=1,
-            )
+                topic = gr.Textbox(
+                    label="Topic / Premise",
+                    placeholder="A mother discovers her son has been lying for years...",
+                    lines=2,
+                )
+                age = gr.Dropdown(
+                    ["general"], value="general", label="Age group", visible=False,
+                )
 
-        do_refine = gr.Checkbox(
-            value=True, label="Refine script",
-            info="Second LLM pass for better hooks and pacing",
-        )
+                with gr.Row():
+                    n_scenes = gr.Slider(3, 12, value=8, step=1, label="Scenes")
+                    model = gr.Dropdown(
+                        ["qwen2.5:7b", "llama3.2:3b"],
+                        value=config.OLLAMA_MODEL, label="Model",
+                        allow_custom_value=True,
+                    )
 
-        gr.HTML('<div style="height: 4px;"></div>')
-        btn_script = gr.Button(
-            "Write Script", variant="primary", elem_classes="ios-btn-primary",
-        )
+                do_refine = gr.Checkbox(
+                    value=True, label="Refine script",
+                    info="Second LLM pass for stronger hooks and pacing",
+                )
+                btn_script = gr.Button("Write Script", variant="primary", elem_classes="btn-primary")
 
-    # ══════════════ STEP 2: Review & Edit ══════════════
-    with gr.Group(elem_classes="ios-card"):
-        gr.HTML(
-            '<div class="ios-section-title">'
-            '<span class="ios-step-num">2</span> Review & Edit Script'
-            '</div>'
-        )
+            # ── Script review ──
+            with gr.Group(elem_classes="panel"):
+                gr.HTML('<div class="panel-title">Script Review</div>')
+                status = gr.Markdown("", elem_classes="status-badge")
+                vid_title = gr.Textbox(label="Title", interactive=True)
+                with gr.Row():
+                    vid_desc = gr.Textbox(label="Description", lines=2, interactive=True, scale=2)
+                    vid_tags = gr.Textbox(label="Tags", interactive=True, scale=1)
+                table = gr.Dataframe(
+                    headers=HEADERS, datatype=["str"] * 4,
+                    col_count=(4, "fixed"), row_count=(8, "dynamic"),
+                    interactive=True, wrap=True, label="Scenes",
+                )
+                with gr.Row():
+                    speed = gr.Slider(0.7, 1.2, value=0.85, step=0.05, label="Voice speed")
+                    res = gr.Dropdown(list(RESOLUTIONS), value="720p (faster)", label="Resolution")
+                    seed = gr.Number(value=1234, precision=0, label="Image seed")
+                btn_render = gr.Button("Render Video", variant="primary", elem_classes="btn-primary")
 
-        status = gr.Markdown("", elem_classes="ios-status")
-        vid_title = gr.Textbox(label="Title", interactive=True)
+            # ── Output ──
+            with gr.Group(elem_classes="panel"):
+                gr.HTML('<div class="panel-title">Output</div>')
+                log_create = gr.Textbox(label="Progress", lines=10, max_lines=14, interactive=False, elem_classes="console")
+                video_create = gr.Video(label="Video")
 
-        with gr.Row():
-            vid_desc = gr.Textbox(label="Description", lines=2, interactive=True, scale=2)
-            vid_tags = gr.Textbox(label="Tags", interactive=True, scale=1,
-                                  placeholder="drama, story, twist")
+        # ═══════════════ TAB 2: YouTube Clipper ═══════════════
+        with gr.TabItem("YouTube Clipper"):
+            with gr.Group(elem_classes="panel"):
+                gr.HTML('<div class="panel-title">Clip Highlights from YouTube</div>')
+                gr.HTML(
+                    '<p style="color:var(--text-2);font-size:13px;margin:0 0 14px">'
+                    'Paste a YouTube URL. The system downloads the video, analyzes the '
+                    'transcript with the local LLM, picks the best moments, and assembles '
+                    'a highlight reel with captions.</p>'
+                )
+                yt_url = gr.Textbox(label="YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
+                with gr.Row():
+                    yt_clips = gr.Slider(2, 10, value=5, step=1, label="Number of clips")
+                    yt_dur = gr.Slider(5, 30, value=15, step=5, label="Clip duration (sec)")
+                    yt_model = gr.Dropdown(
+                        ["qwen2.5:7b", "llama3.2:3b"],
+                        value=config.OLLAMA_MODEL, label="Model",
+                        allow_custom_value=True,
+                    )
+                btn_clip = gr.Button("Clip Highlights", variant="primary", elem_classes="btn-primary")
 
-        table = gr.Dataframe(
-            headers=HEADERS,
-            datatype=["str", "str", "str", "str"],
-            col_count=(4, "fixed"),
-            row_count=(8, "dynamic"),
-            interactive=True,
-            wrap=True,
-            label="Scenes",
-        )
+            with gr.Group(elem_classes="panel"):
+                gr.HTML('<div class="panel-title">Output</div>')
+                log_yt = gr.Textbox(label="Progress", lines=10, max_lines=14, interactive=False, elem_classes="console")
+                video_yt = gr.Video(label="Highlight Reel")
 
-        with gr.Row():
-            speed = gr.Slider(0.7, 1.2, value=0.85, step=0.05, label="Voice speed")
-            res = gr.Dropdown(list(RESOLUTIONS), value="720p (faster)", label="Resolution")
-            seed = gr.Number(value=1234, precision=0, label="Image seed")
+    gr.HTML('<div class="app-footer">Output includes thumbnail.png, metadata.json, and scene assets.</div>')
 
-        gr.HTML('<div style="height: 4px;"></div>')
-        btn_make = gr.Button(
-            "Make Video", variant="primary", elem_classes="ios-btn-primary",
-        )
-
-    # ══════════════ STEP 3: Result ══════════════
-    with gr.Group(elem_classes="ios-card"):
-        gr.HTML(
-            '<div class="ios-section-title">'
-            '<span class="ios-step-num">3</span> Result'
-            '</div>'
-        )
-        log_box = gr.Textbox(
-            label="Progress", lines=10, max_lines=14,
-            interactive=False, elem_classes="ios-log",
-        )
-        video = gr.Video(label="Finished video")
-
-    # ── Footer ──
-    gr.HTML("""
-        <div class="ios-footer">
-            Each video folder includes thumbnail.png, metadata.json, and individual scene assets.
-        </div>
-    """)
-
-    # ── Event wiring ──
+    # ── Wiring ──
     genre_radio.change(on_genre_change, [genre_radio], [speed, n_scenes, age, trends_box])
-    genre_radio.change(get_suggestions, [genre_radio], trends_box)
+    btn_trends.click(refresh_trends, outputs=[trends_box])
 
     btn_script.click(
         write_script,
         [genre_radio, topic, age, n_scenes, model, do_refine],
         [vid_title, vid_desc, vid_tags, table, outdir_state, status],
     )
-    btn_make.click(
-        make_video,
+    btn_render.click(
+        render_video,
         [genre_radio, outdir_state, vid_title, vid_desc, vid_tags, table, speed, res, seed],
-        [log_box, video],
+        [log_create, video_create],
+    )
+    btn_clip.click(
+        clip_youtube,
+        [yt_url, yt_clips, yt_dur, yt_model],
+        [log_yt, video_yt],
     )
 
 
