@@ -26,6 +26,23 @@ def _ts(msg: str):
     _log(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
+# ── Safe template formatting ────────────────────────────────────────────
+
+def _safe_format(template: str, **kwargs) -> str:
+    """Format a template that contains literal braces (e.g. JSON examples).
+
+    Escapes all ``{`` / ``}`` first, then re-opens only the known
+    placeholder names so ``.format()`` fills them in.  This lets genre
+    templates include JSON examples without doubling every brace.
+    """
+    # Escape every brace
+    escaped = template.replace("{", "{{").replace("}", "}}")
+    # Un-escape the known placeholders: {{key}} → {key}
+    for key in kwargs:
+        escaped = escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}")
+    return escaped.format(**kwargs)
+
+
 # ── LLM call ───────────────────────────────────────────────────────────
 
 def _call_ollama(system: str, user: str, model: str) -> dict:
@@ -73,7 +90,7 @@ def refine_script(script: dict, model: str) -> dict:
     """Second LLM pass: critique and improve the script."""
     _ts("Refining script (second LLM pass)...")
     script_json = json.dumps(script, indent=2, ensure_ascii=False)
-    user_msg = _REFINE_USER.format(script_json=script_json)
+    user_msg = _safe_format(_REFINE_USER, script_json=script_json)
 
     try:
         refined = _call_ollama(_REFINE_SYSTEM, user_msg, model)
@@ -126,7 +143,8 @@ def generate_script(
     do_refine = refine if refine is not None else REFINE_SCRIPT
 
     system = genre["script_system_prompt"]
-    user = genre["script_user_template"].format(
+    user = _safe_format(
+        genre["script_user_template"],
         topic=topic,
         scenes=n_scenes,
         age=age,
