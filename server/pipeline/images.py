@@ -113,13 +113,18 @@ def generate_images(
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 
     if USE_CPU_OFFLOAD:
+        # enable_vae_slicing must be called BEFORE cpu offload on SDXL
+        if hasattr(pipe, "enable_vae_slicing"):
+            pipe.enable_vae_slicing()
+        if hasattr(pipe, "enable_attention_slicing"):
+            pipe.enable_attention_slicing()
         pipe.enable_model_cpu_offload()
     else:
         pipe.to("cuda")
-
-    pipe.enable_vae_slicing()
-    if hasattr(pipe, "enable_attention_slicing"):
-        pipe.enable_attention_slicing()
+        if hasattr(pipe, "enable_vae_slicing"):
+            pipe.enable_vae_slicing()
+        if hasattr(pipe, "enable_attention_slicing"):
+            pipe.enable_attention_slicing()
 
     neg = _negative(genre)
     img_dir = outdir / "images"
