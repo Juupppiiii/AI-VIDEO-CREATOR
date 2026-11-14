@@ -7,13 +7,12 @@ Strategy: load one model at a time, unload before loading the next.
 from pathlib import Path
 
 # ──────────────────────── Paths ────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent   # AI-VIDEO-CREATOR/
-SERVER_ROOT = PROJECT_ROOT / "server"
-OUT_ROOT = PROJECT_ROOT / "output"
-MUSIC_DIR = PROJECT_ROOT / "music"
-SFX_DIR = PROJECT_ROOT / "sfx"
-DATA_DIR = PROJECT_ROOT / "data"
-GENRES_DIR = SERVER_ROOT / "genres" / "templates"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent   # AI-VIDEO-CREATOR/
+OUT_ROOT     = PROJECT_ROOT / "output"
+MUSIC_DIR    = PROJECT_ROOT / "music"
+SFX_DIR      = PROJECT_ROOT / "sfx"
+DATA_DIR     = PROJECT_ROOT / "data"
+GENRES_DIR   = PROJECT_ROOT / "genres" / "templates"
 
 # ──────────────────────── Ollama (script) ──────────────
 OLLAMA_URL = "http://localhost:11434/api/chat"

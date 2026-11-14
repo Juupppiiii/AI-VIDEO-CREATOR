@@ -3,27 +3,26 @@
 Command-line interface for the video production pipeline.
 
 Usage:
-    python server/_cli.py --genre drama_story "A mother discovers her son's secret"
-    python server/_cli.py --genre kids_educational "Why is the sky blue?" --age 3-5
-    python server/_cli.py --genre trivia_quiz "Amazing animal facts"
-    python server/_cli.py --list-genres
-    python server/_cli.py --script output/<folder>/script.json
-    python server/_cli.py --topics-file topics.txt --genre horror_story
-    python server/_cli.py --no-refine "Quick test topic"
+    python _cli.py --genre drama_story "A mother discovers her son's secret"
+    python _cli.py --genre kids_educational "Why is the sky blue?" --age 3-5
+    python _cli.py --genre trivia_quiz "Amazing animal facts"
+    python _cli.py --list-genres
+    python _cli.py --script output/<folder>/script.json
+    python _cli.py --topics-file topics.txt --genre horror_story
+    python _cli.py --no-refine "Quick test topic"
 """
 import argparse
 import json
+import os
 import shutil
 import sys
 import time
 from pathlib import Path
 
-# ── path setup (allows running as ``python server/_cli.py`` from project root)
-_SERVER = Path(__file__).resolve().parent
-_ROOT = _SERVER.parent
-if str(_SERVER) not in sys.path:
-    sys.path.insert(0, str(_SERVER))
-import os
+# Project root is this file's parent — add it to path so imports work
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 os.chdir(_ROOT)
 
 from pipeline import config

@@ -5,17 +5,17 @@ Utility: fetch and cache trending topics.
 Run this whenever you have internet to refresh the local trends cache.
 The Gradio UI and CLI can then suggest topics even when offline.
 
-    python server/_update_trends.py
+    python _update_trends.py
 """
 import sys
+import os
 from pathlib import Path
 
-_SERVER = Path(__file__).resolve().parent
-if str(_SERVER) not in sys.path:
-    sys.path.insert(0, str(_SERVER))
-
-import os
-os.chdir(_SERVER.parent)
+# Project root is this file's parent — add it to path so imports work
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
 
 from trends.fetcher import update_trends
 

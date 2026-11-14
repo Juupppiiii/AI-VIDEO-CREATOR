@@ -16,11 +16,10 @@ import time
 import traceback
 from pathlib import Path
 
-_APP = Path(__file__).resolve().parent
-_SERVER = _APP.parent
-_ROOT = _SERVER.parent
-if str(_SERVER) not in sys.path:
-    sys.path.insert(0, str(_SERVER))
+# ── path setup ──────────────────────────────────────────────────────────
+_ROOT = Path(__file__).resolve().parent.parent   # project root (app/ → root)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 os.chdir(_ROOT)
 
 import gradio as gr

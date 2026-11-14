@@ -28,7 +28,7 @@ echo.
 echo    ──────────────────────────────────────
 echo.
 
-python server/app/main.py
+python app/main.py
 
 echo.
 echo    App closed. Press any key to exit.
