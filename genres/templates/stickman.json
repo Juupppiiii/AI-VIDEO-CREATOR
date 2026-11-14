@@ -16,6 +16,8 @@
   "lora_trigger": "stickman stick figure",
   "lora_scale": 0.85,
 
+  "default_format": "Landscape 16:9",
+
   "voice_map": {
     "narrator": "am_adam"
   },

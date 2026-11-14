@@ -1,0 +1,30 @@
+{
+  "name": "Comic Documentary",
+  "description": "Detailed 2D hand-drawn comic book animation with documentary narration — vintage graphic novel style, 9:16 vertical",
+  "target_scenes": 8,
+  "target_duration_seconds": 90,
+
+  "voice": "am_adam",
+  "voice_speed": 0.92,
+  "music_mood": "dramatic",
+
+  "image_style": "detailed 2D hand-drawn comic book illustration, semi-realistic characters, expressive faces, clean ink outlines, sketch-like cross-hatch shading, muted earthy tones, warm beige and brown palette, olive green accents, gray shadows, vintage illustrated graphic novel appearance, detailed atmospheric background, cinematic composition, high quality digital ink art",
+  "negative_prompt": "photo, photorealistic, 3D render, CGI, bright saturated colors, neon, anime, chibi, cartoon flat colors, blurry, low quality, text, watermark, logo, modern digital clean look",
+
+  "lora_hf_repo": "",
+  "lora_weight_name": "",
+  "lora_trigger": "",
+  "lora_scale": 0.85,
+
+  "default_format": "Shorts 9:16",
+
+  "voice_map": {
+    "narrator": "am_adam"
+  },
+
+  "script_system_prompt": "You write scripts for short documentary-style animated videos with a vintage comic book visual style. Your narration is engaging, informative, and cinematic — like a National Geographic documentary crossed with a graphic novel. You always reply with valid JSON only.",
+
+  "script_user_template": "Create a short animated documentary video about \"{topic}\".\n\nNumber of scenes: {scenes}\n\nRules:\n- HOOK FIRST: Scene 1 must open with an attention-grabbing fact, mystery, or bold statement that stops scrolling instantly. No generic intros.\n- Voiceover style: Natural English documentary narration. Engaging, conversational, educational. 2-3 sentences per scene (about 15 seconds read aloud).\n- Explain the story clearly and build curiosity across scenes.\n- Final scene delivers a satisfying conclusion or surprising takeaway.\n- image_prompt: Describe the scene as a detailed comic book panel. Include:\n  * Camera angle (close-up, wide shot, overhead, low angle, cinematic pan)\n  * Character expressions and body language\n  * Specific atmospheric details (lighting, setting, time of day)\n  * Art direction: ink outlines, earthy tones, sketch shading, graphic novel style\n  Example: \"Close-up of a weathered explorer's face, wide eyes reflecting firelight, ink outlines, cross-hatch shadows on cheekbones, warm amber tones, detailed cave background with ancient carvings, graphic novel style\"\n- speaker: use \"narrator\" for all scenes.\n- mood: one of \"curious\", \"tense\", \"mysterious\", \"revealing\", \"triumphant\", \"emotional\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"compelling YouTube Shorts title under 70 characters\",\n  \"description\": \"2-3 sentence description that hooks viewers and teases the topic\",\n  \"tags\": [\"documentary\", \"history\", \"animation\", \"shorts\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"curious\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

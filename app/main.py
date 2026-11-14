@@ -47,10 +47,14 @@ FORMAT_OUT_SIZES = {
 }
 HEADERS = ["Narration", "Image prompt", "Speaker", "Mood"]
 GENRE_MAP = {
-    "drama_story": "Drama", "horror_story": "Horror",
-    "kids_educational": "Kids", "motivational": "Motivational",
-    "mystery": "Mystery", "trivia_quiz": "Trivia",
-    "stickman": "Stickman",
+    "drama_story":        "Drama",
+    "horror_story":       "Horror",
+    "kids_educational":   "Kids",
+    "motivational":       "Motivational",
+    "mystery":            "Mystery",
+    "trivia_quiz":        "Trivia",
+    "stickman":           "Stickman",
+    "comic_documentary":  "Comic Doc",
 }
 LABEL_TO_ID = {v: k for k, v in GENRE_MAP.items()}
 
@@ -516,7 +520,9 @@ def on_genre_change(label):
     try:
         genre = load_genre(gid)
     except FileNotFoundError:
-        return gr.update(), gr.update(), gr.update(), gr.update()
+        return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+    # Auto-set format if the genre specifies a default (e.g. Comic Doc → Shorts 9:16)
+    default_fmt = genre.get("default_format", "Landscape 16:9")
     return (
         gr.update(value=genre.get("voice_speed", 0.9)),
         gr.update(value=genre.get("target_scenes", 7)),
@@ -526,6 +532,7 @@ def on_genre_change(label):
             value=genre.get("default_age", "general"),
         ),
         _trend_text(label),
+        gr.update(value=default_fmt),
     )
 
 
@@ -701,7 +708,7 @@ with gr.Blocks(title="AI Video Creator") as demo:
     )
 
     # ── wiring ──────────────────────────────────────────────
-    genre.change(on_genre_change, [genre], [speed_sl, scenes_sl, age, trends])
+    genre.change(on_genre_change, [genre], [speed_sl, scenes_sl, age, trends, fmt_dd])
     btn_trends.click(refresh_trends, outputs=[trends])
 
     btn_write.click(
