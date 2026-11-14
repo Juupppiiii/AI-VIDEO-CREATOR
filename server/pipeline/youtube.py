@@ -5,12 +5,14 @@ Downloads a video via yt-dlp, extracts subtitles, uses the local LLM
 to identify the most engaging moments, then clips and assembles them
 into a highlight reel with transitions and captions.
 
-Requires ``yt-dlp`` in PATH — install with ``pip install yt-dlp``.
+yt-dlp is invoked as ``python -m yt_dlp`` so it works even when the
+yt-dlp script isn't on PATH (common on Windows Store Python installs).
 """
 import json
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,12 @@ from pipeline.config import (
     OLLAMA_URL, OLLAMA_MODEL, OUT_ROOT, OUT_W, OUT_H, FPS,
     TRANSITION_DUR, MUSIC_DIR, MUSIC_VOLUME,
 )
+
+_log = print
+
+# Always invoke yt-dlp through the current Python interpreter so it works
+# regardless of whether the yt-dlp script is in PATH.
+_YTDLP = [sys.executable, "-m", "yt_dlp"]
 
 _log = print
 
@@ -45,8 +53,15 @@ def _run(cmd, cwd=None, timeout=600):
 
 
 def check_ytdlp() -> bool:
-    """Return True if yt-dlp is available."""
-    return shutil.which("yt-dlp") is not None
+    """Return True if yt-dlp is importable (works even without PATH entry)."""
+    try:
+        result = subprocess.run(
+            _YTDLP + ["--version"],
+            capture_output=True, text=True, timeout=15,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 # ── Download ────────────────────────────────────────────────────────────
@@ -58,7 +73,7 @@ def download_video(url: str, outdir: Path) -> tuple[Path, Path | None]:
 
     # Download video as mp4
     _run([
-        "yt-dlp",
+        *_YTDLP,
         "-f", "mp4/bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4/best",
         "--merge-output-format", "mp4",
         "--write-auto-sub", "--sub-lang", "en",
@@ -351,7 +366,7 @@ def process_youtube(
     else:
         _ts("No subtitles found — using video title for highlight detection")
         # Fallback: get video info for the LLM
-        p = _run(["yt-dlp", "--print", "title", "--no-playlist", url])
+        p = _run([*_YTDLP, "--print", "title", "--no-playlist", url])
         transcript = f"Video title: {p.stdout.strip()}\n(No transcript available)"
 
     highlights, title = identify_highlights(transcript, n_clips, clip_duration, model)
