@@ -55,7 +55,7 @@ THEME = gr.themes.Base(
     body_background_fill="#f9fafb", body_text_color="#111827",
     body_text_color_subdued="#6b7280",
     block_background_fill="#ffffff", block_border_width="1px",
-    block_border_color="#e5e7eb", block_radius="12px",
+    block_border_color="#e5e7eb", container_radius="12px",
     block_shadow="0 1px 3px 0 rgba(0,0,0,0.04)",
     block_title_text_color="#111827", block_title_text_size="14px",
     block_title_text_weight="600",
@@ -70,11 +70,12 @@ THEME = gr.themes.Base(
     button_secondary_background_fill="#ffffff",
     button_secondary_background_fill_hover="#eff6ff",
     button_secondary_text_color="#2563eb", button_secondary_border_color="#d1d5db",
-    button_border_width="1px", button_shadow="none",
+    button_border_width="1px",
+    button_primary_shadow="none", button_secondary_shadow="none",
     button_large_radius="8px", button_large_text_size="14px",
     button_large_text_weight="600",
     button_small_radius="6px", button_small_text_size="13px",
-    tab_nav_background_fill="#f9fafb", layout_gap="16px",
+    layout_gap="16px",
     section_header_text_size="11px", section_header_text_weight="600",
 )
 
@@ -492,7 +493,7 @@ def on_genre_change(label):
 # UI
 # ════════════════════════════════════════════════════════════════════════
 
-with gr.Blocks(title="AI Video Creator", theme=THEME, css=CSS) as demo:
+with gr.Blocks(title="AI Video Creator") as demo:
     outdir_state = gr.State("")
 
     gr.Markdown(
@@ -552,7 +553,7 @@ with gr.Blocks(title="AI Video Creator", theme=THEME, css=CSS) as demo:
                     tags_tb = gr.Textbox(label="Tags", interactive=True, scale=1)
                 scene_table = gr.Dataframe(
                     headers=HEADERS, datatype=["str"] * 4,
-                    col_count=(4, "fixed"), row_count=(8, "dynamic"),
+                    column_count=(4, "fixed"), row_count=(8, "dynamic"),
                     interactive=True, wrap=True, label="Scenes",
                 )
                 with gr.Row():
@@ -643,4 +644,4 @@ with gr.Blocks(title="AI Video Creator", theme=THEME, css=CSS) as demo:
 
 if __name__ == "__main__":
     demo.queue(default_concurrency_limit=1)
-    demo.launch(inbrowser=True, allowed_paths=[str(config.OUT_ROOT.resolve())])
+    demo.launch(inbrowser=True, theme=THEME, css=CSS, allowed_paths=[str(config.OUT_ROOT.resolve())])
