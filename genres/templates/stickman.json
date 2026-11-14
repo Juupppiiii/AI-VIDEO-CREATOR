@@ -1,0 +1,28 @@
+{
+  "name": "Stickman",
+  "description": "Fast-paced stickman animation style videos — action, comedy, or educational",
+  "target_scenes": 8,
+  "target_duration_seconds": 60,
+
+  "voice": "am_adam",
+  "voice_speed": 1.0,
+  "music_mood": "cheerful",
+
+  "image_style": "stickman stick figure drawing, simple black line art on white background, minimalist 2D cartoon, hand-drawn style, clean bold outlines, expressive stick figures, flat colors, no shading, simple shapes",
+  "negative_prompt": "realistic, photo, 3D, complex background, detailed, shading, gradient, dark, scary, text, watermark, blurry",
+
+  "lora_hf_repo": "",
+  "lora_weight_name": "",
+  "lora_trigger": "stickman stick figure",
+  "lora_scale": 0.85,
+
+  "voice_map": {
+    "narrator": "am_adam"
+  },
+
+  "script_system_prompt": "You write scripts for fun stickman animation videos. Your scripts are fast-paced, punchy, and visual — every scene describes clear physical action that works as a stickman drawing. You always reply with valid JSON only.",
+
+  "script_user_template": "Write a stickman animation video script.\n\nTopic: \"{topic}\"\nNumber of scenes: {scenes}\n\nRules:\n- HOOK FIRST: Scene 1 must open with immediate action or a bold statement. No slow intros.\n- Keep narration SHORT and punchy — 1 to 2 sentences per scene max.\n- Every scene describes a clear physical action or visual gag that works as a stickman drawing.\n- Use energetic, conversational language. Direct address to the viewer works well.\n- image_prompt: describe ONLY the stickman action — what the stick figure is doing, their pose, expression, and any simple props. Example: \"stickman running away from a giant boulder, arms flailing, mouth wide open in shock\"\n- speaker: use \"narrator\" for all scenes.\n- mood: one of \"excited\", \"cheerful\", \"curious\", \"determined\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"catchy YouTube title under 70 characters\",\n  \"description\": \"2-3 sentence YouTube description\",\n  \"tags\": [\"stickman\", \"animation\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"excited\"}\n  ]\n}",
+
+  "made_for_kids": false
+}

@@ -44,13 +44,20 @@ def free_gpu():
 
 
 def _build_prompt(raw_prompt: str, genre: dict[str, Any]) -> str:
-    """Prefix the raw image prompt with the genre's art style."""
+    """Prefix the raw image prompt with the genre's art style.
+
+    If the genre has a LoRA trigger word, it is prepended so the LoRA
+    activates correctly on every scene.
+    """
     style = genre.get("image_style", "")
     mascot_name = genre.get("mascot_name")
     mascot_look = genre.get("mascot_look")
     if mascot_name and mascot_look:
         raw_prompt = raw_prompt.replace(mascot_name, mascot_look)
-    parts = [p for p in (raw_prompt.strip(), style.strip()) if p]
+
+    # Prepend LoRA trigger word if set (must come first for best activation)
+    trigger = genre.get("lora_trigger", "").strip()
+    parts = [p for p in (trigger, raw_prompt.strip(), style.strip()) if p]
     return ", ".join(parts)
 
 
@@ -136,6 +143,21 @@ def generate_images(
             pipe.enable_vae_slicing()
         if hasattr(pipe, "enable_attention_slicing"):
             pipe.enable_attention_slicing()
+
+    # ── Optional LoRA from genre template ──────────────────────────────
+    # Set lora_hf_repo + lora_weight_name in a genre JSON to automatically
+    # load and fuse a style LoRA (e.g. stickman, anime, watercolor).
+    lora_repo   = genre.get("lora_hf_repo", "").strip()
+    lora_weight = genre.get("lora_weight_name", "").strip()
+    lora_scale  = float(genre.get("lora_scale", 0.85))
+    if lora_repo and lora_weight:
+        _ts(f"Loading style LoRA: {lora_repo}/{lora_weight} (scale={lora_scale})")
+        try:
+            pipe.load_lora_weights(lora_repo, weight_name=lora_weight)
+            pipe.fuse_lora(lora_scale=lora_scale)
+            _ts("LoRA fused successfully")
+        except Exception as e:
+            _ts(f"LoRA load failed ({e}) — continuing without LoRA")
 
     neg = _negative(genre)
     img_dir = outdir / "images"

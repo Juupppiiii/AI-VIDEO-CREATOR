@@ -50,6 +50,7 @@ GENRE_MAP = {
     "drama_story": "Drama", "horror_story": "Horror",
     "kids_educational": "Kids", "motivational": "Motivational",
     "mystery": "Mystery", "trivia_quiz": "Trivia",
+    "stickman": "Stickman",
 }
 LABEL_TO_ID = {v: k for k, v in GENRE_MAP.items()}
 
