@@ -20,11 +20,12 @@ OLLAMA_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "qwen2.5:7b"
 
 # ──────────────────────── Image generation ─────────────
-# SDXL base with model-cpu-offload keeps peak VRAM around 4.5 GB
-SD_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
-STEPS = 20           # DPM++ 2M Karras — 20 is the sweet spot for quality/speed
+# SD 1.5 — stable on 5-6 GB VRAM, loads in ~2 GB, faster than SDXL.
+# Switch to "stabilityai/stable-diffusion-xl-base-1.0" if you have 8+ GB VRAM.
+SD_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+STEPS = 25           # SD 1.5 benefits from slightly more steps than SDXL
 GUIDANCE = 7.0
-USE_CPU_OFFLOAD = True   # essential for ≤6 GB VRAM
+USE_CPU_OFFLOAD = False  # SD 1.5 fits fully on 5 GB VRAM — no offload needed
 
 # Shared negative prompt applied to every genre
 NEGATIVE_BASE = (
@@ -35,9 +36,9 @@ NEGATIVE_BASE = (
 
 # ──────────────────────── Image upscaling ──────────────
 # Lanczos 2x upscale before Ken Burns gives the zoompan more pixels.
-# Zero extra VRAM — runs on CPU via Pillow after SDXL is unloaded.
+# Zero extra VRAM — runs on CPU via Pillow after SD is unloaded.
 UPSCALE_IMAGES = True
-UPSCALE_FACTOR = 2    # 1024×576 → 2048×1152
+UPSCALE_FACTOR = 2    # 768×432 → 1536×864
 
 # ──────────────────────── Video output ─────────────────
 # Landscape 16:9 (YouTube standard)
@@ -46,11 +47,11 @@ OUT_H = 720
 # Vertical 9:16 (YouTube Shorts)
 OUT_W_SHORT = 1080
 OUT_H_SHORT = 1920
-# Image generation sizes
-IMG_W = 1024
-IMG_H = 576          # native SDXL 16:9
-IMG_W_SHORT = 576
-IMG_H_SHORT = 1024   # native SDXL 9:16
+# Image generation sizes — SD 1.5 native multiples of 64
+IMG_W = 768
+IMG_H = 432          # 16:9
+IMG_W_SHORT = 432
+IMG_H_SHORT = 768    # 9:16
 FPS = 25
 SCENE_PAD = 0.5          # silence after narration before transition
 TRANSITION_DUR = 0.5     # cross-dissolve seconds between scenes

@@ -114,7 +114,9 @@ def generate_images(
     else:
         from diffusers import StableDiffusionPipeline
         pipe = StableDiffusionPipeline.from_pretrained(
-            SD_MODEL, torch_dtype=torch.float16,
+            SD_MODEL,
+            torch_dtype=torch.float16,
+            safety_checker=None,   # saves ~300 MB VRAM
         )
 
     from diffusers import DPMSolverMultistepScheduler

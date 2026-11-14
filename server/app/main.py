@@ -36,10 +36,10 @@ import requests as _requests
 
 # ── constants ───────────────────────────────────────────────────────────
 RESOLUTIONS = {"720p": (1280, 720), "1080p": (1920, 1080)}
-# Image sizes per format (width, height passed to SDXL)
+# Image sizes per format (width, height passed to SD)
 FORMAT_IMG_SIZES = {
-    "Landscape 16:9": (1024, 576),
-    "Shorts 9:16":    (576, 1024),
+    "Landscape 16:9": (768, 432),
+    "Shorts 9:16":    (432, 768),
 }
 # Output video sizes per format
 FORMAT_OUT_SIZES = {
