@@ -89,7 +89,8 @@ def _write_srt(scenes, durations, path, transition_dur=0.0, time_offset=0.0):
 
 # ── per-scene clip ──────────────────────────────────────────────────────
 
-def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int):
+def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int,
+               out_w: int = OUT_W, out_h: int = OUT_H):
     """Render one scene: image with Ken Burns + audio + padding."""
     total = dur + SCENE_PAD
     frames = int(math.ceil(total * FPS))
@@ -101,9 +102,9 @@ def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int):
         z = f"1.10-0.10*(on-1)/{frames}"
 
     vf = (
-        f"scale={OUT_W * 2}:{OUT_H * 2}:flags=lanczos,"
+        f"scale={out_w * 2}:{out_h * 2}:flags=lanczos,"
         f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        f":d={frames}:s={OUT_W}x{OUT_H}:fps={FPS},format=yuv420p"
+        f":d={frames}:s={out_w}x{out_h}:fps={FPS},format=yuv420p"
     )
     _run([
         "ffmpeg", "-y",
@@ -119,14 +120,15 @@ def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int):
 
 # ── intro / outro clips ────────────────────────────────────────────────
 
-def _make_card_clip(img: Path, dur: float, out: Path):
+def _make_card_clip(img: Path, dur: float, out: Path,
+                    out_w: int = OUT_W, out_h: int = OUT_H):
     """Render a static image into a silent video clip of *dur* seconds."""
     frames = int(math.ceil(dur * FPS))
     _run([
         "ffmpeg", "-y",
         "-loop", "1", "-i", str(img),
         "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo",
-        "-vf", f"scale={OUT_W}:{OUT_H},format=yuv420p",
+        "-vf", f"scale={out_w}:{out_h},format=yuv420p",
         "-t", f"{dur:.3f}",
         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-c:a", "aac", "-shortest",
@@ -240,8 +242,19 @@ def assemble(
     genre: dict[str, Any],
     outdir: Path,
     title: str = "",
+    out_w: int | None = None,
+    out_h: int | None = None,
 ) -> Path:
-    """Full video assembly pipeline."""
+    """Full video assembly pipeline.
+
+    ``out_w`` / ``out_h`` override config defaults so callers can render
+    vertical 9:16 video for YouTube Shorts.
+    """
+    # Resolve output dimensions
+    w = out_w or OUT_W
+    h = out_h or OUT_H
+    is_vertical = h > w
+
     clips_dir = outdir / "clips"
     clips_dir.mkdir(exist_ok=True)
 
@@ -250,7 +263,7 @@ def assemble(
     clip_durations: list[float] = []
     for i, (img, wav, dur) in enumerate(zip(images, audios, durations)):
         out = clips_dir / f"scene_{i:02d}.mp4"
-        _make_clip(img, wav, dur, out, i)
+        _make_clip(img, wav, dur, out, i, out_w=w, out_h=h)
         clip_paths.append(out)
         clip_durations.append(dur + SCENE_PAD)
         _ts(f"Clip {i + 1}/{len(images)} rendered")
@@ -269,12 +282,12 @@ def assemble(
             genre, genre_id, outdir,
         )
         intro_clip = clips_dir / "intro.mp4"
-        _make_card_clip(intro_img, INTRO_DURATION, intro_clip)
+        _make_card_clip(intro_img, INTRO_DURATION, intro_clip, out_w=w, out_h=h)
         _ts("Intro card rendered")
 
         outro_img = generate_outro_card(genre, genre_id, outdir)
         outro_clip = clips_dir / "outro.mp4"
-        _make_card_clip(outro_img, OUTRO_DURATION, outro_clip)
+        _make_card_clip(outro_img, OUTRO_DURATION, outro_clip, out_w=w, out_h=h)
         _ts("Outro card rendered")
     except Exception as exc:
         _ts(f"Intro/outro generation skipped: {exc}")
@@ -334,12 +347,21 @@ def assemble(
     _write_srt(scenes, durations, outdir / "captions.srt", t_dur, caption_offset)
 
     srt_posix = (outdir / "captions.srt").resolve().as_posix().replace(":", "\\:")
-    style = (
-        "FontName=Arial,FontSize=24,Bold=1,"
-        "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-        "BackColour=&H80000000,BorderStyle=3,"
-        "Outline=2,Shadow=0,Alignment=2,MarginV=40"
-    )
+    # Vertical (Shorts): bigger font, higher margin so text clears the bottom UI
+    if is_vertical:
+        style = (
+            "FontName=Arial,FontSize=42,Bold=1,"
+            "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+            "BackColour=&H80000000,BorderStyle=3,"
+            "Outline=3,Shadow=0,Alignment=2,MarginV=180"
+        )
+    else:
+        style = (
+            "FontName=Arial,FontSize=24,Bold=1,"
+            "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+            "BackColour=&H80000000,BorderStyle=3,"
+            "Outline=2,Shadow=0,Alignment=2,MarginV=40"
+        )
     sub_filter = f"subtitles='{srt_posix}':force_style='{style}'"
 
     # ── Step 5: SFX track ──

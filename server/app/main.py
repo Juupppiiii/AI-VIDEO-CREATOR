@@ -36,6 +36,16 @@ import requests as _requests
 
 # ── constants ───────────────────────────────────────────────────────────
 RESOLUTIONS = {"720p": (1280, 720), "1080p": (1920, 1080)}
+# Image sizes per format (width, height passed to SDXL)
+FORMAT_IMG_SIZES = {
+    "Landscape 16:9": (1024, 576),
+    "Shorts 9:16":    (576, 1024),
+}
+# Output video sizes per format
+FORMAT_OUT_SIZES = {
+    "Landscape 16:9": {"720p": (1280, 720),  "1080p": (1920, 1080)},
+    "Shorts 9:16":    {"720p": (1080, 1920), "1080p": (1080, 1920)},
+}
 HEADERS = ["Narration", "Image prompt", "Speaker", "Mood"]
 GENRE_MAP = {
     "drama_story": "Drama", "horror_story": "Horror",
@@ -302,7 +312,7 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine, progress=g
 
 
 # ── render video (with progress bar) ───────────────────────────────────
-def render_video(genre_label, outdir, title, desc, tags, table, speed, res, seed):
+def render_video(genre_label, outdir, title, desc, tags, table, speed, res, fmt, seed):
     if not outdir:
         raise gr.Error("Generate a script first.")
     gid = _to_id(genre_label or "Drama")
@@ -333,6 +343,11 @@ def render_video(genre_label, outdir, title, desc, tags, table, speed, res, seed
     )
     config.OUT_W, config.OUT_H = RESOLUTIONS.get(res, (1280, 720))
 
+    # Resolve format-aware dimensions
+    fmt = fmt or "Landscape 16:9"
+    img_w, img_h = FORMAT_IMG_SIZES.get(fmt, (1024, 576))
+    out_w, out_h = FORMAT_OUT_SIZES.get(fmt, RESOLUTIONS).get(res, (1280, 720))
+
     q = queue.Queue()
     import pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler
 
@@ -355,9 +370,11 @@ def render_video(genre_label, outdir, title, desc, tags, table, speed, res, seed
 
     def work():
         try:
-            imgs = generate_images(scenes, genre, outdir, int(seed))
+            imgs = generate_images(scenes, genre, outdir, int(seed),
+                                   img_w=img_w, img_h=img_h)
             auds, durs = generate_voice(scenes, genre, outdir, float(speed))
-            result["final"] = assemble(scenes, imgs, auds, durs, genre, outdir, title=title)
+            result["final"] = assemble(scenes, imgs, auds, durs, genre, outdir,
+                                       title=title, out_w=out_w, out_h=out_h)
             if config.GENERATE_THUMBNAIL and imgs:
                 try:
                     from pipeline.thumbnail import generate_thumbnail
@@ -565,6 +582,11 @@ with gr.Blocks(title="AI Video Creator") as demo:
                     res_dd = gr.Dropdown(
                         list(RESOLUTIONS), value="720p", label="Resolution",
                     )
+                    fmt_dd = gr.Dropdown(
+                        list(FORMAT_IMG_SIZES), value="Landscape 16:9",
+                        label="Format",
+                        info="Shorts 9:16 generates vertical video for YouTube Shorts",
+                    )
                     seed_num = gr.Number(value=1234, precision=0, label="Seed")
                 btn_render = gr.Button("Render Video", variant="primary")
 
@@ -634,7 +656,7 @@ with gr.Blocks(title="AI Video Creator") as demo:
     btn_render.click(
         render_video,
         [genre, outdir_state, title_tb, desc_tb, tags_tb,
-         scene_table, speed_sl, res_dd, seed_num],
+         scene_table, speed_sl, res_dd, fmt_dd, seed_num],
         [progress_bar1, log1, vid1],
     )
     btn_clip.click(

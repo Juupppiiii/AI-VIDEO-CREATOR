@@ -22,8 +22,6 @@ OLLAMA_MODEL = "qwen2.5:7b"
 # ──────────────────────── Image generation ─────────────
 # SDXL base with model-cpu-offload keeps peak VRAM around 4.5 GB
 SD_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
-IMG_W = 1024
-IMG_H = 576          # native SDXL 16:9
 STEPS = 20           # DPM++ 2M Karras — 20 is the sweet spot for quality/speed
 GUIDANCE = 7.0
 USE_CPU_OFFLOAD = True   # essential for ≤6 GB VRAM
@@ -42,8 +40,17 @@ UPSCALE_IMAGES = True
 UPSCALE_FACTOR = 2    # 1024×576 → 2048×1152
 
 # ──────────────────────── Video output ─────────────────
+# Landscape 16:9 (YouTube standard)
 OUT_W = 1280
 OUT_H = 720
+# Vertical 9:16 (YouTube Shorts)
+OUT_W_SHORT = 1080
+OUT_H_SHORT = 1920
+# Image generation sizes
+IMG_W = 1024
+IMG_H = 576          # native SDXL 16:9
+IMG_W_SHORT = 576
+IMG_H_SHORT = 1024   # native SDXL 9:16
 FPS = 25
 SCENE_PAD = 0.5          # silence after narration before transition
 TRANSITION_DUR = 0.5     # cross-dissolve seconds between scenes

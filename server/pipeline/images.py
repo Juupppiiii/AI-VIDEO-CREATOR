@@ -77,13 +77,21 @@ def generate_images(
     genre: dict[str, Any],
     outdir: Path,
     base_seed: int = 1234,
+    img_w: int | None = None,
+    img_h: int | None = None,
 ) -> list[Path]:
     """Generate one image per scene. Returns a list of saved PNG paths.
 
+    ``img_w`` / ``img_h`` override the config defaults so callers can
+    request vertical (9:16) images for YouTube Shorts.
     If ``UPSCALE_IMAGES`` is True, each image is upscaled after generation
     (SDXL unloaded first, so upscale uses zero VRAM).
     """
     import torch
+
+    # Resolve dimensions — caller overrides take priority over config
+    width  = img_w or IMG_W
+    height = img_h or IMG_H
 
     if not torch.cuda.is_available():
         sys.exit(
@@ -140,8 +148,8 @@ def generate_images(
             out = pipe(
                 prompt,
                 negative_prompt=neg,
-                width=IMG_W,
-                height=IMG_H,
+                width=width,
+                height=height,
                 num_inference_steps=STEPS,
                 guidance_scale=GUIDANCE,
                 generator=gen,
