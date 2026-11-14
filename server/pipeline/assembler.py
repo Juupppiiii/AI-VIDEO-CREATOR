@@ -47,6 +47,95 @@ def _run(cmd, cwd=None):
     return p
 
 
+# ── caption style builder ───────────────────────────────────────────────
+
+# Named colors → ASS &HAABBGGRR format (alpha=00 = fully opaque)
+_COLOR_MAP = {
+    "white":   "&H00FFFFFF",
+    "black":   "&H00000000",
+    "yellow":  "&H0000FFFF",
+    "red":     "&H000000FF",
+    "green":   "&H0000FF00",
+    "blue":    "&H00FF0000",
+    "cyan":    "&H00FFFF00",
+    "magenta": "&H00FF00FF",
+    "orange":  "&H000080FF",
+    "pink":    "&H00CBC0FF",
+}
+
+# Caption position → ASS Alignment value + MarginV
+_POSITION_MAP = {
+    # Alignment: 2=bottom-centre, 8=top-centre, 5=middle-centre
+    "bottom": (2, None),   # None = use default margin
+    "top":    (8, None),
+    "middle": (5, 0),
+}
+
+
+def _named_to_ass(color: str) -> str:
+    """Convert a named color or pass-through hex to ASS &HAABBGGRR."""
+    if color.startswith("&H"):
+        return color
+    return _COLOR_MAP.get(color.lower(), "&H00FFFFFF")
+
+
+def _build_caption_style(
+    font:     str,
+    size:     int,
+    color:    str,
+    bold:     bool,
+    style:    str,
+    position: str,
+    is_vertical: bool,
+) -> str:
+    """Build an ASS force_style string from UI caption settings."""
+    # Font size: explicit override, or sensible default per format
+    if size and size > 0:
+        fs = size
+    else:
+        fs = 26 if is_vertical else 24
+
+    primary = _named_to_ass(color)
+    bold_val = 1 if bold else 0
+
+    align, margin_override = _POSITION_MAP.get(position, (2, None))
+    margin_v = margin_override if margin_override is not None else (120 if is_vertical else 40)
+
+    # Style presets
+    if style == "box":
+        border_style = 3
+        outline      = 2
+        shadow       = 0
+        back_colour  = "&H80000000"   # semi-transparent black box
+        outline_col  = "&H00000000"
+    elif style == "outline":
+        border_style = 1
+        outline      = 2
+        shadow       = 0
+        back_colour  = "&H00000000"
+        outline_col  = "&H00000000"
+    elif style == "shadow":
+        border_style = 1
+        outline      = 1
+        shadow       = 3
+        back_colour  = "&H00000000"
+        outline_col  = "&H00000000"
+    else:  # plain
+        border_style = 0
+        outline      = 0
+        shadow       = 0
+        back_colour  = "&H00000000"
+        outline_col  = "&H00000000"
+
+    return (
+        f"FontName={font},FontSize={fs},Bold={bold_val},"
+        f"PrimaryColour={primary},OutlineColour={outline_col},"
+        f"BackColour={back_colour},BorderStyle={border_style},"
+        f"Outline={outline},Shadow={shadow},"
+        f"Alignment={align},MarginV={margin_v}"
+    )
+
+
 # ── captions ────────────────────────────────────────────────────────────
 
 def _caption_chunks(text: str) -> list[str]:
@@ -266,7 +355,7 @@ def _total_duration(
 
 def assemble(
     scenes: list[dict],
-    images: list[Path],
+    images: list[Path],          # PNG paths (still) OR MP4 paths (animated)
     audios: list[Path],
     durations: list[float],
     genre: dict[str, Any],
@@ -274,11 +363,20 @@ def assemble(
     title: str = "",
     out_w: int | None = None,
     out_h: int | None = None,
+    # ── caption customization ──────────────────────────────────────────
+    caption_font:      str = "Arial",
+    caption_size:      int = 0,       # 0 = auto (24 landscape / 26 shorts)
+    caption_color:     str = "white", # text color: named or &HAABBGGRR
+    caption_bold:      bool = True,
+    caption_style:     str = "box",   # "box" | "outline" | "shadow" | "plain"
+    caption_position:  str = "bottom",# "bottom" | "top" | "middle"
 ) -> Path:
     """Full video assembly pipeline.
 
-    ``out_w`` / ``out_h`` override config defaults so callers can render
-    vertical 9:16 video for YouTube Shorts.
+    ``images`` can be a list of PNG paths (still images, Ken Burns applied)
+    or MP4 paths (pre-animated clips from AnimateDiff — Ken Burns skipped).
+
+    Caption appearance is fully controlled via the caption_* parameters.
     """
     # Resolve output dimensions
     w = out_w or OUT_W
@@ -289,13 +387,35 @@ def assemble(
     clips_dir.mkdir(exist_ok=True)
 
     # ── Step 1: per-scene clips ──
+    # Detect whether we received animated MP4s or still PNGs
+    animated = images and images[0].suffix.lower() == ".mp4"
+
     clip_paths: list[Path] = []
     clip_durations: list[float] = []
+
     for i, (img, wav, dur) in enumerate(zip(images, audios, durations)):
         out = clips_dir / f"scene_{i:02d}.mp4"
-        _make_clip(img, wav, dur, out, i, out_w=w, out_h=h)
+        total = dur + SCENE_PAD
+
+        if animated:
+            # Already a video — just mux narration audio + padding, scale to output size
+            _run([
+                "ffmpeg", "-y",
+                "-stream_loop", "-1", "-i", str(img),   # loop the short anim clip
+                "-i", str(wav),
+                "-vf", f"scale={w}:{h}:flags=lanczos,format=yuv420p",
+                "-af", f"apad=pad_dur={SCENE_PAD}",
+                "-t", f"{total:.3f}",
+                "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                "-c:a", "aac", "-ar", "44100", "-ac", "2",
+                str(out),
+            ])
+        else:
+            # Still image — apply Ken Burns zoompan
+            _make_clip(img, wav, dur, out, i, out_w=w, out_h=h)
+
         clip_paths.append(out)
-        clip_durations.append(dur + SCENE_PAD)
+        clip_durations.append(total)
         _ts(f"Clip {i + 1}/{len(images)} rendered")
 
     # ── Step 2: skip intro/outro — start directly on scene content ──
@@ -330,22 +450,7 @@ def assemble(
     _write_srt(scenes, durations, outdir / "captions.srt", t_dur, 0.0)
 
     srt_posix = (outdir / "captions.srt").resolve().as_posix().replace(":", "\\:")
-    # Vertical (Shorts): moderate font size — 1080px wide canvas, 26pt reads well
-    if is_vertical:
-        style = (
-            "FontName=Arial,FontSize=26,Bold=1,"
-            "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-            "BackColour=&H80000000,BorderStyle=3,"
-            "Outline=2,Shadow=0,Alignment=2,MarginV=120"
-        )
-    else:
-        style = (
-            "FontName=Arial,FontSize=24,Bold=1,"
-            "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-            "BackColour=&H80000000,BorderStyle=3,"
-            "Outline=2,Shadow=0,Alignment=2,MarginV=40"
-        )
-    sub_filter = f"subtitles='{srt_posix}':force_style='{style}'"
+    sub_filter = f"subtitles='{srt_posix}':force_style='{_build_caption_style(caption_font, caption_size, caption_color, caption_bold, caption_style, caption_position, is_vertical)}'"
 
     # ── Step 5: SFX track ──
     sfx_path = None

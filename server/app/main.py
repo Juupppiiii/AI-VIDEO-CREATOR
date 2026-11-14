@@ -312,7 +312,10 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine, progress=g
 
 
 # ── render video (with progress bar) ───────────────────────────────────
-def render_video(genre_label, outdir, title, desc, tags, table, speed, res, fmt, seed):
+def render_video(genre_label, outdir, title, desc, tags, table,
+                 speed, res, fmt, seed,
+                 use_anim,
+                 cap_font, cap_size, cap_color, cap_bold, cap_style, cap_pos):
     if not outdir:
         raise gr.Error("Generate a script first.")
     gid = _to_id(genre_label or "Drama")
@@ -370,11 +373,27 @@ def render_video(genre_label, outdir, title, desc, tags, table, speed, res, fmt,
 
     def work():
         try:
-            imgs = generate_images(scenes, genre, outdir, int(seed),
-                                   img_w=img_w, img_h=img_h)
+            if use_anim:
+                from pipeline.animate import generate_animated_clips, set_logger as set_anim_log
+                set_anim_log(tee)
+                imgs = generate_animated_clips(
+                    scenes, genre, outdir, int(seed),
+                    img_w=img_w, img_h=img_h,
+                )
+            else:
+                imgs = generate_images(scenes, genre, outdir, int(seed),
+                                       img_w=img_w, img_h=img_h)
             auds, durs = generate_voice(scenes, genre, outdir, float(speed))
-            result["final"] = assemble(scenes, imgs, auds, durs, genre, outdir,
-                                       title=title, out_w=out_w, out_h=out_h)
+            result["final"] = assemble(
+                scenes, imgs, auds, durs, genre, outdir,
+                title=title, out_w=out_w, out_h=out_h,
+                caption_font=cap_font or "Arial",
+                caption_size=int(cap_size or 0),
+                caption_color=cap_color or "white",
+                caption_bold=bool(cap_bold),
+                caption_style=cap_style or "box",
+                caption_position=cap_pos or "bottom",
+            )
             if config.GENERATE_THUMBNAIL and imgs:
                 try:
                     from pipeline.thumbnail import generate_thumbnail
@@ -588,6 +607,43 @@ with gr.Blocks(title="AI Video Creator") as demo:
                         info="Shorts 9:16 generates vertical video for YouTube Shorts",
                     )
                     seed_num = gr.Number(value=1234, precision=0, label="Seed")
+
+                # ── Animation toggle ───────────────────────────────────
+                use_anim_cb = gr.Checkbox(
+                    value=False, label="Animated scenes (AnimateDiff-Lightning)",
+                    info="Generates moving cartoon clips per scene instead of still images. "
+                         "Downloads ~180 MB on first use. Slower but lively.",
+                )
+
+                # ── Caption customization ──────────────────────────────
+                with gr.Accordion("Caption settings", open=False):
+                    with gr.Row():
+                        cap_font_dd = gr.Dropdown(
+                            ["Arial", "Impact", "Comic Sans MS", "Verdana",
+                             "Trebuchet MS", "Georgia", "Courier New"],
+                            value="Arial", label="Font",
+                        )
+                        cap_size_num = gr.Number(
+                            value=0, precision=0, label="Font size (0 = auto)",
+                            info="0 = 24pt landscape / 26pt Shorts",
+                        )
+                        cap_bold_cb = gr.Checkbox(value=True, label="Bold")
+                    with gr.Row():
+                        cap_color_dd = gr.Dropdown(
+                            ["white", "yellow", "cyan", "orange",
+                             "pink", "green", "black", "red"],
+                            value="white", label="Text color",
+                        )
+                        cap_style_dd = gr.Dropdown(
+                            ["box", "outline", "shadow", "plain"],
+                            value="box", label="Style",
+                            info="box = semi-transparent bg | outline = text border | shadow | plain",
+                        )
+                        cap_pos_dd = gr.Dropdown(
+                            ["bottom", "top", "middle"],
+                            value="bottom", label="Position",
+                        )
+
                 btn_render = gr.Button("Render Video", variant="primary")
 
             with gr.Group():
@@ -656,7 +712,10 @@ with gr.Blocks(title="AI Video Creator") as demo:
     btn_render.click(
         render_video,
         [genre, outdir_state, title_tb, desc_tb, tags_tb,
-         scene_table, speed_sl, res_dd, fmt_dd, seed_num],
+         scene_table, speed_sl, res_dd, fmt_dd, seed_num,
+         use_anim_cb,
+         cap_font_dd, cap_size_num, cap_color_dd, cap_bold_cb,
+         cap_style_dd, cap_pos_dd],
         [progress_bar1, log1, vid1],
     )
     btn_clip.click(

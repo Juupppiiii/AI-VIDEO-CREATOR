@@ -69,6 +69,17 @@ SFX_VOLUME = 0.12
 # Second LLM pass to critique and improve the script for better hooks.
 REFINE_SCRIPT = True
 
+# ──────────────────────── AnimateDiff-Lightning ────────
+# Set USE_ANIMATEDIFF=True to generate short animated clips per scene
+# instead of still images with Ken Burns.
+# Uses AnimateDiff-Lightning (ByteDance) on top of SD 1.5 — fits 5GB VRAM.
+USE_ANIMATEDIFF    = False          # flip to True to enable
+ANIMATEDIFF_STEPS  = 4             # 4-step Lightning model — fast + good quality
+ANIMATEDIFF_FRAMES = 16            # frames per scene clip (~0.64 s at 25 fps)
+ANIMATEDIFF_BASE   = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+ANIMATEDIFF_REPO   = "ByteDance/AnimateDiff-Lightning"
+ANIMATEDIFF_CKPT   = "animatediff_lightning_4step_diffusers.safetensors"
+
 # ──────────────────────── Intro / Outro ────────────────
 INTRO_DURATION = 2.0     # seconds — title card before the story
 OUTRO_DURATION = 3.0     # seconds — "thanks for watching" end card
