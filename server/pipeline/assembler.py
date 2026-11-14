@@ -5,9 +5,11 @@ Produces the final MP4 through these stages:
 
 1. Per-scene clips — image (Ken Burns zoom/pan) + narration audio
 2. Cross-fade chain — mood-specific transitions between scenes
-3. Intro / outro cards — prepended and appended as short clips
-4. Captions — styled SRT overlay
-5. Audio mix — narration + mood-matched music (ducked) + SFX track
+3. Captions — styled SRT overlay
+4. Audio mix — narration + mood-matched music (ducked) + SFX track
+
+Note: intro/outro cards are intentionally skipped — video starts
+directly on scene content for a snappier feel.
 """
 import math
 import re
@@ -21,7 +23,6 @@ from pipeline.config import (
     OUT_W, OUT_H, FPS, SCENE_PAD, TRANSITION_DUR,
     CAPTION_WORDS, MUSIC_DIR, MUSIC_VOLUME, MUSIC_DUCK_VOLUME,
     MOOD_TRANSITIONS, SFX_ENABLED,
-    INTRO_DURATION, OUTRO_DURATION,
 )
 
 _log = print
@@ -89,21 +90,50 @@ def _write_srt(scenes, durations, path, transition_dur=0.0, time_offset=0.0):
 
 # ── per-scene clip ──────────────────────────────────────────────────────
 
+# 6 distinct Ken Burns movements — cycled by scene index so every scene
+# looks different and feels alive rather than repeating the same zoom.
+_KB_MOVES = [
+    # 0: zoom in from centre
+    lambda f: (f"1+0.12*(on-1)/{f}",
+               "iw/2-(iw/zoom/2)",
+               "ih/2-(ih/zoom/2)"),
+    # 1: zoom out from centre
+    lambda f: (f"1.12-0.12*(on-1)/{f}",
+               "iw/2-(iw/zoom/2)",
+               "ih/2-(ih/zoom/2)"),
+    # 2: pan left while holding slight zoom
+    lambda f: (f"1.08",
+               f"(iw-iw/zoom)*(on-1)/({f}-1)",
+               "ih/2-(ih/zoom/2)"),
+    # 3: pan right while holding slight zoom
+    lambda f: (f"1.08",
+               f"(iw-iw/zoom)*(1-(on-1)/({f}-1))",
+               "ih/2-(ih/zoom/2)"),
+    # 4: diagonal drift — top-left to bottom-right zoom in
+    lambda f: (f"1+0.10*(on-1)/{f}",
+               f"(iw-iw/zoom)*(on-1)/({f}-1)*0.5",
+               f"(ih-ih/zoom)*(on-1)/({f}-1)*0.5"),
+    # 5: push-in from bottom (face-focus feel)
+    lambda f: (f"1+0.14*(on-1)/{f}",
+               "iw/2-(iw/zoom/2)",
+               f"ih-ih/zoom-(ih-ih/zoom)*(on-1)/({f}-1)"),
+]
+
+
 def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int,
                out_w: int = OUT_W, out_h: int = OUT_H):
-    """Render one scene: image with Ken Burns + audio + padding."""
+    """Render one scene: lively Ken Burns movement + audio + padding."""
     total = dur + SCENE_PAD
     frames = int(math.ceil(total * FPS))
+    # guard against division by zero in movement formulas
+    frames = max(frames, 2)
 
-    # Alternate zoom-in / zoom-out
-    if idx % 2 == 0:
-        z = f"1+0.10*(on-1)/{frames}"
-    else:
-        z = f"1.10-0.10*(on-1)/{frames}"
+    move = _KB_MOVES[idx % len(_KB_MOVES)]
+    z_expr, x_expr, y_expr = move(frames)
 
     vf = (
         f"scale={out_w * 2}:{out_h * 2}:flags=lanczos,"
-        f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}'"
         f":d={frames}:s={out_w}x{out_h}:fps={FPS},format=yuv420p"
     )
     _run([
@@ -268,51 +298,10 @@ def assemble(
         clip_durations.append(dur + SCENE_PAD)
         _ts(f"Clip {i + 1}/{len(images)} rendered")
 
-    # ── Step 2: intro / outro cards ──
-    intro_clip = None
-    outro_clip = None
-    try:
-        from pipeline.thumbnail import generate_intro_card, generate_outro_card
-        genre_id = _guess_genre_id(genre)
-
-        # Use the video title for the intro card (fall back to first narration)
-        intro_title = title or (scenes[0].get("narration", "")[:80] if scenes else "")
-        intro_img = generate_intro_card(
-            intro_title,
-            genre, genre_id, outdir,
-        )
-        intro_clip = clips_dir / "intro.mp4"
-        _make_card_clip(intro_img, INTRO_DURATION, intro_clip, out_w=w, out_h=h)
-        _ts("Intro card rendered")
-
-        outro_img = generate_outro_card(genre, genre_id, outdir)
-        outro_clip = clips_dir / "outro.mp4"
-        _make_card_clip(outro_img, OUTRO_DURATION, outro_clip, out_w=w, out_h=h)
-        _ts("Outro card rendered")
-    except Exception as exc:
-        _ts(f"Intro/outro generation skipped: {exc}")
-        intro_clip = None
-        outro_clip = None
-
-    # Build the full clip sequence: [intro] + scenes + [outro]
-    full_clips: list[Path] = []
-    full_durations: list[float] = []
-    # Scenes for transition mapping (intro/outro get "neutral" mood)
-    full_scenes: list[dict] = []
-
-    if intro_clip:
-        full_clips.append(intro_clip)
-        full_durations.append(INTRO_DURATION)
-        full_scenes.append({"mood": "neutral"})
-
-    full_clips.extend(clip_paths)
-    full_durations.extend(clip_durations)
-    full_scenes.extend(scenes)
-
-    if outro_clip:
-        full_clips.append(outro_clip)
-        full_durations.append(OUTRO_DURATION)
-        full_scenes.append({"mood": "neutral"})
+    # ── Step 2: skip intro/outro — start directly on scene content ──
+    full_clips    = clip_paths
+    full_durations = clip_durations
+    full_scenes   = scenes
 
     # ── Step 3: mood-based transitions ──
     merged = outdir / "merged.mp4"
@@ -337,23 +326,17 @@ def assemble(
                   "-i", str(concat_list), "-c", "copy", str(merged)])
 
     # ── Step 4: captions ──
-    # Caption offset = intro duration minus the transition into the first scene
-    if intro_clip and t_dur > 0:
-        caption_offset = INTRO_DURATION - t_dur
-    elif intro_clip:
-        caption_offset = INTRO_DURATION
-    else:
-        caption_offset = 0.0
-    _write_srt(scenes, durations, outdir / "captions.srt", t_dur, caption_offset)
+    # No intro card — captions always start at t=0
+    _write_srt(scenes, durations, outdir / "captions.srt", t_dur, 0.0)
 
     srt_posix = (outdir / "captions.srt").resolve().as_posix().replace(":", "\\:")
-    # Vertical (Shorts): bigger font, higher margin so text clears the bottom UI
+    # Vertical (Shorts): moderate font size — 1080px wide canvas, 26pt reads well
     if is_vertical:
         style = (
-            "FontName=Arial,FontSize=42,Bold=1,"
+            "FontName=Arial,FontSize=26,Bold=1,"
             "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
             "BackColour=&H80000000,BorderStyle=3,"
-            "Outline=3,Shadow=0,Alignment=2,MarginV=180"
+            "Outline=2,Shadow=0,Alignment=2,MarginV=120"
         )
     else:
         style = (
@@ -371,10 +354,8 @@ def assemble(
             from pipeline.sfx import build_sfx_track, set_logger as set_sfx_log
             set_sfx_log(_log)
             total_dur = _total_duration(full_durations, t_dur)
-            # SFX needs to know where the scene content starts (after intro)
-            sfx_offset = caption_offset
             sfx_path = build_sfx_track(
-                scenes, durations, t_dur, total_dur, time_offset=sfx_offset,
+                scenes, durations, t_dur, total_dur, time_offset=0.0,
             )
         except Exception as exc:
             _ts(f"SFX generation skipped: {exc}")
