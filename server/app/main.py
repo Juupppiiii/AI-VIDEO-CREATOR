@@ -392,10 +392,13 @@ def render_video(genre_label, outdir, title, desc, tags, table, speed, res, seed
     yield _pbar_html(0.01, "Starting"), "\n".join(lines), None
     while True:
         try:
-            msg = q.get(timeout=300)
+            msg = q.get(timeout=2)   # short timeout — keeps WebSocket alive
         except queue.Empty:
-            lines.append("Timed out.")
-            break
+            # heartbeat: re-yield current state so the connection doesn't drop
+            frac, stage = _estimate_render_progress(lines)
+            yield _pbar_html(frac, stage), "\n".join(lines), None
+            # check if the thread is still alive; if not and queue empty, bail
+            continue
         if msg is None:
             break
         lines.append(msg)
@@ -452,10 +455,11 @@ def clip_youtube(url, n_clips, clip_dur, model):
     yield _pbar_html(0.05, "Starting"), "\n".join(lines), None
     while True:
         try:
-            msg = q.get(timeout=300)
+            msg = q.get(timeout=2)   # short timeout — keeps WebSocket alive
         except queue.Empty:
-            lines.append("Timed out.")
-            break
+            frac, stage = _estimate_yt_progress(lines)
+            yield _pbar_html(frac, stage), "\n".join(lines), None
+            continue
         if msg is None:
             break
         lines.append(msg)
@@ -643,5 +647,5 @@ with gr.Blocks(title="AI Video Creator") as demo:
 
 
 if __name__ == "__main__":
-    demo.queue(default_concurrency_limit=1)
+    demo.queue(default_concurrency_limit=1, max_size=1)
     demo.launch(inbrowser=True, theme=THEME, css=CSS, allowed_paths=[str(config.OUT_ROOT.resolve())])
