@@ -116,6 +116,7 @@ def generate_animated_clips(
         motion_adapter=adapter,
         torch_dtype=torch.float16,
         safety_checker=None,
+        disable_mmap=True,       # avoids paging file OOM on Windows with small page file
     ).to("cuda")
 
     # Lightning scheduler — trailing timestep spacing required

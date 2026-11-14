@@ -117,6 +117,7 @@ def generate_images(
             SD_MODEL,
             torch_dtype=torch.float16,
             safety_checker=None,   # saves ~300 MB VRAM
+            disable_mmap=True,     # avoids paging file OOM on Windows
         )
 
     from diffusers import DPMSolverMultistepScheduler
