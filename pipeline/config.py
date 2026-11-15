@@ -1,147 +1,138 @@
 """
-Central configuration for the video production pipeline.
-
-Hardware target: RTX 4050 (6 GB VRAM), Intel i5-13th gen, 8 GB RAM.
-Strategy: load one model at a time, unload before loading the next.
+Central configuration — Comic Documentary Studio
+Hardware target: RTX 4050 Laptop (6 GB VRAM), 7.7 GB RAM, Windows 11.
+Strategy: load one model at a time, unload before the next.
+All output is 9:16 portrait (YouTube Shorts).
 """
 from pathlib import Path
 
-# ──────────────────────── Paths ────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent   # AI-VIDEO-CREATOR/
+# ──────────────────────── Paths ────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUT_ROOT     = PROJECT_ROOT / "output"
 MUSIC_DIR    = PROJECT_ROOT / "music"
 SFX_DIR      = PROJECT_ROOT / "sfx"
 DATA_DIR     = PROJECT_ROOT / "data"
 GENRES_DIR   = PROJECT_ROOT / "genres" / "templates"
 
-# ──────────────────────── Ollama (script) ──────────────
-OLLAMA_URL = "http://localhost:11434/api/chat"
+# ──────────────────────── Ollama (script generation) ───────────────────
+OLLAMA_URL   = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "qwen2.5:7b"
 
-# ──────────────────────── Image generation ─────────────
-# SD 1.5 — stable on 5-6 GB VRAM, loads in ~2 GB, faster than SDXL.
-# Switch to "stabilityai/stable-diffusion-xl-base-1.0" if you have 8+ GB VRAM.
-SD_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-STEPS = 25           # SD 1.5 benefits from slightly more steps than SDXL
-GUIDANCE = 7.0
-USE_CPU_OFFLOAD = False  # SD 1.5 fits fully on 5 GB VRAM — no offload needed
+# ──────────────────────── Image generation (SD 1.5) ────────────────────
+# SD 1.5 loads in ~2 GB VRAM — fits the RTX 4050 comfortably.
+# SDXL needs 6+ GB and OOMs on this machine — keep SD 1.5.
+SD_MODEL        = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+STEPS           = 28          # 28 steps: noticeably sharper than 25, still fast
+GUIDANCE        = 7.5         # slight increase for stronger comic-art style adherence
+USE_CPU_OFFLOAD = False       # SD 1.5 fits fully on 6 GB — no offload needed
 
-# Shared negative prompt applied to every genre
+# Shared negative prompt — appended to every scene's negative
 NEGATIVE_BASE = (
-    "text, letters, words, watermark, logo, deformed, extra limbs, "
-    "bad anatomy, blurry, ugly, low quality, jpeg artifacts, "
-    "oversaturated, underexposed"
+    "text, letters, words, watermark, logo, signature, "
+    "deformed, extra limbs, bad anatomy, blurry, low quality, "
+    "jpeg artifacts, overexposed, underexposed, duplicate"
 )
 
-# ──────────────────────── Image upscaling ──────────────
-# Lanczos 2x upscale before Ken Burns gives the zoompan more pixels.
-# Zero extra VRAM — runs on CPU via Pillow after SD is unloaded.
+# ──────────────────────── Image upscaling (CPU, zero VRAM) ─────────────
+# Lanczos 2× before Ken Burns gives zoompan more pixels to work with.
+# Runs after SD is unloaded so VRAM is free.
 UPSCALE_IMAGES = True
-UPSCALE_FACTOR = 2    # 768×432 → 1536×864
+UPSCALE_FACTOR = 2            # 432×768 → 864×1536
 
-# ──────────────────────── Video output ─────────────────
-# Landscape 16:9 (YouTube standard)
-OUT_W = 1280
-OUT_H = 720
-# Vertical 9:16 (YouTube Shorts)
+# ──────────────────────── Video output — always 9:16 portrait ──────────
+OUT_W = 1080
+OUT_H = 1920
+
+# Legacy landscape constants (kept so other code doesn't break)
 OUT_W_SHORT = 1080
 OUT_H_SHORT = 1920
-# Image generation sizes — SD 1.5 native multiples of 64
-IMG_W = 768
-IMG_H = 432          # 16:9
+
+# SD 1.5 image generation sizes — 9:16 native (multiples of 64)
+IMG_W       = 432
+IMG_H       = 768
+
+# Legacy landscape size (kept for _cli.py compat)
 IMG_W_SHORT = 432
-IMG_H_SHORT = 768    # 9:16
-FPS = 25
-SCENE_PAD = 0.5          # silence after narration before transition
-TRANSITION_DUR = 0.5     # cross-dissolve seconds between scenes
-CAPTION_WORDS = 6        # max words per caption line
+IMG_H_SHORT = 768
 
-# ──────────────────────── Audio ────────────────────────
-MUSIC_VOLUME = 0.08
-MUSIC_DUCK_VOLUME = 0.03     # volume during narration (ducking)
+FPS             = 30          # 30 fps feels more cinematic than 25 for Shorts
+SCENE_PAD       = 0.4         # silence after each narration clip (seconds)
+TRANSITION_DUR  = 0.6         # xfade cross-dissolve duration (seconds)
+CAPTION_WORDS   = 5           # max words per caption line (tighter = more readable)
 
-# ──────────────────────── Sound effects ────────────────
+# ──────────────────────── Audio ─────────────────────────────────────────
+MUSIC_VOLUME      = 0.07      # background music level under narration
+MUSIC_DUCK_VOLUME = 0.02      # ducked level during speech (sidechain compressor)
+
+# ──────────────────────── Sound effects ─────────────────────────────────
 SFX_ENABLED = True
-SFX_VOLUME = 0.12
+SFX_VOLUME  = 0.10
 
-# ──────────────────────── Script refinement ────────────
-# Second LLM pass to critique and improve the script for better hooks.
-REFINE_SCRIPT = True
+# ──────────────────────── Script ────────────────────────────────────────
+REFINE_SCRIPT = True          # second LLM pass for better hooks & pacing
 
-# ──────────────────────── AnimateDiff-Lightning ────────
-# Set USE_ANIMATEDIFF=True to generate short animated clips per scene
-# instead of still images with Ken Burns.
-# Uses AnimateDiff-Lightning (ByteDance) on top of SD 1.5 — fits 5GB VRAM.
-USE_ANIMATEDIFF    = False          # flip to True to enable
-ANIMATEDIFF_STEPS  = 4             # 4-step Lightning model — fast + good quality
-ANIMATEDIFF_FRAMES = 16            # frames per scene clip (~0.64 s at 25 fps)
+# ──────────────────────── AnimateDiff-Lightning ─────────────────────────
+# Generates 16-frame animated clips instead of still images.
+# Requires ~3 GB free RAM at load time.  Toggle in the UI.
+USE_ANIMATEDIFF    = False
+ANIMATEDIFF_STEPS  = 4        # 4-step Lightning distilled model
+ANIMATEDIFF_FRAMES = 16       # ~0.53 s per clip at 30 fps
 ANIMATEDIFF_BASE   = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 ANIMATEDIFF_REPO   = "ByteDance/AnimateDiff-Lightning"
 ANIMATEDIFF_CKPT   = "animatediff_lightning_4step_diffusers.safetensors"
 
-# ──────────────────────── Intro / Outro ────────────────
-INTRO_DURATION = 2.0     # seconds — title card before the story
-OUTRO_DURATION = 3.0     # seconds — "thanks for watching" end card
+# ──────────────────────── Thumbnail & cards ─────────────────────────────
 GENERATE_THUMBNAIL = True
+INTRO_DURATION     = 0.0      # disabled — video starts directly on scene 1
+OUTRO_DURATION     = 0.0      # disabled
 
-# ──────────────────────── Voice map ────────────────────
-# Keys used in genre templates and script JSON ("speaker" field).
+# ──────────────────────── Voice map ─────────────────────────────────────
 VOICE_MAP = {
-    "narrator":      "af_heart",
+    "narrator":      "am_adam",
     "narrator_male": "am_adam",
+    "narrator_f":    "af_heart",
     "character_1":   "af_bella",
     "character_2":   "am_michael",
     "character_3":   "af_nicole",
     "character_4":   "af_sarah",
 }
-DEFAULT_VOICE = "af_heart"
-DEFAULT_VOICE_SPEED = 0.9
+DEFAULT_VOICE       = "am_adam"
+DEFAULT_VOICE_SPEED = 0.90
 
-# ──────────────────────── Mood-based transitions ──────
-# Maps scene mood → FFmpeg xfade transition name.
-# Unmatched moods fall back to "dissolve".
+# ──────────────────────── Mood → xfade transition map ───────────────────
 MOOD_TRANSITIONS: dict[str, str] = {
     # dark / tense
-    "tense": "fadeblack",
-    "dread": "fadeblack",
-    "eerie": "fadeblack",
-    "terrifying": "fadeblack",
-    "unsettling": "fadeblack",
-    "hopeless": "fadeblack",
+    "tense":       "fadeblack",
+    "shocking":    "fadeblack",
+    "dread":       "fadeblack",
+    "eerie":       "fadeblack",
+    "fearful":     "fadeblack",
     "suspenseful": "fadeblack",
-    "fearful": "fadeblack",
-    # reveals / positive
-    "shocking": "wipeleft",
-    "revealing": "fadewhite",
-    "triumphant": "fadewhite",
-    "impressed": "fadewhite",
-    # soft / emotional
-    "emotional": "dissolve",
-    "heartbreaking": "dissolve",
-    "warm": "dissolve",
-    "peaceful": "dissolve",
-    "heavy": "dissolve",
-    "struggling": "dissolve",
+    # reveals
+    "revealing":   "fadewhite",
+    "triumphant":  "fadewhite",
+    "hopeful":     "fadewhite",
+    # emotional / soft
+    "emotional":   "dissolve",
+    "mysterious":  "dissolve",
+    "curious":     "dissolve",
+    "warm":        "dissolve",
+    "peaceful":    "dissolve",
     # energetic
-    "cheerful": "slideleft",
-    "excited": "slideleft",
-    "curious": "slideleft",
-    "determined": "slideleft",
-    "hopeful": "slideleft",
-    # mystery
-    "suspicious": "smoothleft",
-    "intriguing": "smoothleft",
-    "mysterious": "smoothleft",
-    "satisfying": "dissolve",
+    "excited":     "slideleft",
+    "determined":  "slideleft",
+    "cheerful":    "slideleft",
 }
 
-# ──────────────────────── Genre brand colors ───────────
-# Used for intro/outro cards and thumbnail overlays.
+# ──────────────────────── Genre brand colors ────────────────────────────
+# Used for thumbnail overlays.
 GENRE_COLORS: dict[str, dict[str, str]] = {
-    "kids_educational": {"bg": "#FF9F1C", "text": "#FFFFFF"},
-    "drama_story":      {"bg": "#1A1A2E", "text": "#E94560"},
-    "horror_story":     {"bg": "#0D0D0D", "text": "#8B0000"},
-    "trivia_quiz":      {"bg": "#1B0A55", "text": "#FFFFFF"},
-    "motivational":     {"bg": "#1B4332", "text": "#FFD700"},
-    "mystery":          {"bg": "#1A1A2E", "text": "#6C63FF"},
+    "comic_documentary": {"bg": "#1a1a2e", "text": "#d4a853"},
+    "kids_educational":  {"bg": "#FF9F1C", "text": "#FFFFFF"},
+    "drama_story":       {"bg": "#1A1A2E", "text": "#E94560"},
+    "horror_story":      {"bg": "#0D0D0D", "text": "#8B0000"},
+    "trivia_quiz":       {"bg": "#1B0A55", "text": "#FFFFFF"},
+    "motivational":      {"bg": "#1B4332", "text": "#FFD700"},
+    "mystery":           {"bg": "#1A1A2E", "text": "#6C63FF"},
+    "stickman":          {"bg": "#ffffff", "text": "#000000"},
 }

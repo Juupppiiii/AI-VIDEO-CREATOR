@@ -1,15 +1,16 @@
 {
   "name": "Comic Documentary",
-  "description": "Detailed 2D hand-drawn comic book animation with documentary narration — vintage graphic novel style, 9:16 vertical",
+  "description": "Short-form comic book documentary Shorts — vintage graphic novel style, 9:16 portrait, documentary narration",
   "target_scenes": 8,
   "target_duration_seconds": 90,
 
   "voice": "am_adam",
-  "voice_speed": 0.92,
+  "voice_speed": 0.90,
   "music_mood": "dramatic",
 
-  "image_style": "detailed 2D hand-drawn comic book illustration, semi-realistic characters, expressive faces, clean ink outlines, sketch-like cross-hatch shading, muted earthy tones, warm beige and brown palette, olive green accents, gray shadows, vintage illustrated graphic novel appearance, detailed atmospheric background, cinematic composition, high quality digital ink art",
-  "negative_prompt": "photo, photorealistic, 3D render, CGI, bright saturated colors, neon, anime, chibi, cartoon flat colors, blurry, low quality, text, watermark, logo, modern digital clean look",
+  "image_style": "detailed 2D hand-drawn comic book illustration, semi-realistic expressive characters, clean bold ink outlines, cross-hatch sketch shading, muted earthy palette (warm beige, burnt sienna, olive green, slate gray), vintage 1970s graphic novel aesthetic, cinematic panel composition, atmospheric detailed backgrounds, strong foreground subject, high contrast ink art, 9:16 portrait orientation",
+
+  "negative_prompt": "photo, photorealistic, 3D render, CGI, anime, chibi, kawaii, bright neon colors, flat cartoon, low quality, blurry, watermark, text, logo, signature, modern clean digital art, pastel colors, symmetrical, centered composition only",
 
   "lora_hf_repo": "",
   "lora_weight_name": "",
@@ -17,14 +18,13 @@
   "lora_scale": 0.85,
 
   "default_format": "Shorts 9:16",
+  "made_for_kids": false,
 
   "voice_map": {
     "narrator": "am_adam"
   },
 
-  "script_system_prompt": "You write scripts for short documentary-style animated videos with a vintage comic book visual style. Your narration is engaging, informative, and cinematic — like a National Geographic documentary crossed with a graphic novel. You always reply with valid JSON only.",
+  "script_system_prompt": "You are an expert writer for viral YouTube Shorts documentaries in a comic book animation style. You create scripts that hook viewers in the first 3 seconds and maintain tension throughout. Your narration sounds like a confident documentary voiceover — direct, vivid, and surprising. Each scene's image_prompt describes a specific comic book panel with camera angle, character detail, lighting, and atmosphere. You always reply with valid JSON only.",
 
-  "script_user_template": "Create a short animated documentary video about \"{topic}\".\n\nNumber of scenes: {scenes}\n\nRules:\n- HOOK FIRST: Scene 1 must open with an attention-grabbing fact, mystery, or bold statement that stops scrolling instantly. No generic intros.\n- Voiceover style: Natural English documentary narration. Engaging, conversational, educational. 2-3 sentences per scene (about 15 seconds read aloud).\n- Explain the story clearly and build curiosity across scenes.\n- Final scene delivers a satisfying conclusion or surprising takeaway.\n- image_prompt: Describe the scene as a detailed comic book panel. Include:\n  * Camera angle (close-up, wide shot, overhead, low angle, cinematic pan)\n  * Character expressions and body language\n  * Specific atmospheric details (lighting, setting, time of day)\n  * Art direction: ink outlines, earthy tones, sketch shading, graphic novel style\n  Example: \"Close-up of a weathered explorer's face, wide eyes reflecting firelight, ink outlines, cross-hatch shadows on cheekbones, warm amber tones, detailed cave background with ancient carvings, graphic novel style\"\n- speaker: use \"narrator\" for all scenes.\n- mood: one of \"curious\", \"tense\", \"mysterious\", \"revealing\", \"triumphant\", \"emotional\"\n\nReply with JSON in exactly this shape:\n{\n  \"title\": \"compelling YouTube Shorts title under 70 characters\",\n  \"description\": \"2-3 sentence description that hooks viewers and teases the topic\",\n  \"tags\": [\"documentary\", \"history\", \"animation\", \"shorts\", \"...\"],\n  \"scenes\": [\n    {\"narration\": \"...\", \"image_prompt\": \"...\", \"speaker\": \"narrator\", \"mood\": \"curious\"}\n  ]\n}",
-
-  "made_for_kids": false
+  "script_user_template": "Create a short comic book documentary video about: \"{topic}\"\n\nNumber of scenes: {scenes}\n\nCRITICAL RULES:\n\n1. HOOK (Scene 1): Drop the viewer into the most dramatic, surprising, or mysterious moment immediately. Use a bold statement, shocking fact, or unanswered question. Example: \"In 1908, something hit Siberia with the force of 185 nuclear bombs. And we still don't fully know what it was.\"\n\n2. NARRATION STYLE:\n   - Documentary voiceover — confident, direct, conversational\n   - 2-3 short punchy sentences per scene (about 12-15 seconds read aloud)\n   - Build tension and curiosity across scenes\n   - Use present tense for immediacy: \"He opens the envelope. His hands are shaking.\"\n   - Final scene delivers a satisfying twist, revelation, or powerful takeaway\n\n3. IMAGE PROMPTS — Each must describe a specific comic book panel:\n   - Start with a CAMERA ANGLE: close-up / extreme close-up / wide shot / low-angle / overhead / over-the-shoulder / dutch angle / bird's eye\n   - Describe the SUBJECT with specific details: expression, body language, clothing, action\n   - Set the ATMOSPHERE: time of day, weather, lighting direction, mood\n   - Include ART DIRECTION: ink outlines, cross-hatch shading, earthy muted tones, graphic novel style\n   - Example: \"Low-angle close-up of a rugged explorer standing at a canyon edge, jaw set with determination, wind-whipped coat, golden sunset backlighting, long cast shadows, ink outlines, cross-hatch shading on face and jacket, burnt sienna and slate sky tones, vintage comic panel composition\"\n   - NO text, letters, words, or captions in the image\n\n4. MOODS — choose one per scene from: curious / tense / mysterious / revealing / triumphant / emotional / shocking / hopeful\n\nReply with JSON in EXACTLY this shape (no extra keys, no markdown):\n{\n  \"title\": \"compelling YouTube Shorts title, under 70 chars, creates curiosity or urgency\",\n  \"description\": \"2-3 sentence hook for the video description — tease the topic without spoiling the ending\",\n  \"tags\": [\"documentary\", \"history\", \"shorts\", \"animation\", \"comicbook\", \"...3-5 more relevant tags\"],\n  \"scenes\": [\n    {\n      \"narration\": \"Short punchy documentary voiceover. 2-3 sentences.\",\n      \"image_prompt\": \"Detailed comic panel description with camera angle, subject, atmosphere, art direction.\",\n      \"speaker\": \"narrator\",\n      \"mood\": \"curious\"\n    }\n  ]\n}"
 }

@@ -167,14 +167,26 @@ def identify_highlights(
     model = model or OLLAMA_MODEL
     _ts(f"Asking {model} to identify {n_clips} highlights...")
 
+    # Keep the transcript under ~1,000 tokens so the full prompt fits
+    # comfortably inside qwen2.5:7b's context even at the default num_ctx.
+    # We use the MIDDLE of the transcript (skip intros/outros) for best clips.
+    max_chars = 3500
+    if len(transcript) > max_chars:
+        # take a window from ~15% in (skip intro) up to max_chars
+        start = max(0, len(transcript) // 7)
+        excerpt = transcript[start : start + max_chars]
+        _ts(f"Transcript trimmed to {max_chars} chars (full: {len(transcript)})")
+    else:
+        excerpt = transcript
+
     system = (
         "You analyze video transcripts and identify the most engaging, "
         "dramatic, funny, or surprising moments. You always reply with "
         "valid JSON only."
     )
-    user = f"""Here is a timestamped transcript of a video:
+    user = f"""Here is a timestamped transcript excerpt from a video:
 
-{transcript[:8000]}
+{excerpt}
 
 Identify the {n_clips} most engaging, shareable, or dramatic moments.
 For each moment, pick a start timestamp that captures the lead-up
@@ -193,20 +205,33 @@ Return JSON in this exact format:
   ]
 }}"""
 
-    r = requests.post(OLLAMA_URL, json={
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "stream": False,
-        "format": "json",
-        "keep_alive": 0,
-        "options": {"temperature": 0.5},
-    }, timeout=900)
-    r.raise_for_status()
-
-    data = json.loads(r.json()["message"]["content"])
+    for attempt in range(1, 4):
+        try:
+            r = requests.post(OLLAMA_URL, json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "stream": False,
+                "format": "json",
+                "keep_alive": 0,
+                "options": {
+                    "temperature": 0.5,
+                    "num_ctx": 8192,   # explicit context window — prevents 500 errors
+                },
+            }, timeout=900)
+            r.raise_for_status()
+            data = json.loads(r.json()["message"]["content"])
+            highlights = data.get("highlights", [])
+            if not highlights:
+                raise ValueError("Empty highlights list")
+            break
+        except Exception as e:
+            _ts(f"Attempt {attempt}/3 failed: {e}")
+            if attempt == 3:
+                _ts("LLM failed — falling back to evenly spaced clips")
+                return [], "Highlights"
     highlights = data.get("highlights", [])
 
     # Parse timestamps

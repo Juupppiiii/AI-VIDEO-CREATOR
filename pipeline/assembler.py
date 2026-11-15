@@ -178,48 +178,101 @@ def _write_srt(scenes, durations, path, transition_dur=0.0, time_offset=0.0):
 
 
 # ── per-scene clip ──────────────────────────────────────────────────────
-
-# 6 distinct Ken Burns movements — cycled by scene index so every scene
-# looks different and feels alive rather than repeating the same zoom.
+#
+# 12 cinematic camera moves — tuned for 9:16 portrait, cycled by scene
+# index. Every move is a real documentary/film technique.
+#
+# Convention: each lambda takes (frames) and returns (z_expr, x_expr, y_expr)
+# for FFmpeg zoompan. iw/ih are the INPUT (upscaled 2×) dimensions.
+# The output is out_w × out_h which is half of iw/ih.
+#
+# Start zoom 1.0 = no crop, 1.15 = 15 % zoom in. Max safe is ~1.25.
+#
 _KB_MOVES = [
-    # 0: zoom in from centre
-    lambda f: (f"1+0.12*(on-1)/{f}",
-               "iw/2-(iw/zoom/2)",
-               "ih/2-(ih/zoom/2)"),
-    # 1: zoom out from centre
-    lambda f: (f"1.12-0.12*(on-1)/{f}",
-               "iw/2-(iw/zoom/2)",
-               "ih/2-(ih/zoom/2)"),
-    # 2: pan left while holding slight zoom
-    lambda f: (f"1.08",
-               f"(iw-iw/zoom)*(on-1)/({f}-1)",
-               "ih/2-(ih/zoom/2)"),
-    # 3: pan right while holding slight zoom
-    lambda f: (f"1.08",
-               f"(iw-iw/zoom)*(1-(on-1)/({f}-1))",
-               "ih/2-(ih/zoom/2)"),
-    # 4: diagonal drift — top-left to bottom-right zoom in
-    lambda f: (f"1+0.10*(on-1)/{f}",
-               f"(iw-iw/zoom)*(on-1)/({f}-1)*0.5",
-               f"(ih-ih/zoom)*(on-1)/({f}-1)*0.5"),
-    # 5: push-in from bottom (face-focus feel)
-    lambda f: (f"1+0.14*(on-1)/{f}",
-               "iw/2-(iw/zoom/2)",
-               f"ih-ih/zoom-(ih-ih/zoom)*(on-1)/({f}-1)"),
+    # 0 — PUSH IN (slow zoom toward centre — dramatic reveal)
+    lambda f: (
+        f"1.04+0.14*(on-1)/{f}",
+        "iw/2-(iw/zoom/2)",
+        "ih/2-(ih/zoom/2)",
+    ),
+    # 1 — PULL BACK (zoom out — context reveal, isolation feeling)
+    lambda f: (
+        f"1.18-0.14*(on-1)/{f}",
+        "iw/2-(iw/zoom/2)",
+        "ih/2-(ih/zoom/2)",
+    ),
+    # 2 — PAN LEFT (slow horizontal sweep — scanning a scene)
+    lambda f: (
+        "1.12",
+        f"(iw-iw/1.12)*(on-1)/({f}-1)",
+        "ih/2-(ih/1.12/2)",
+    ),
+    # 3 — PAN RIGHT (reverse sweep)
+    lambda f: (
+        "1.12",
+        f"(iw-iw/1.12)*(1-(on-1)/({f}-1))",
+        "ih/2-(ih/1.12/2)",
+    ),
+    # 4 — TILT UP (pan upward — reverence, scale)
+    lambda f: (
+        "1.12",
+        "iw/2-(iw/1.12/2)",
+        f"(ih-ih/1.12)*(1-(on-1)/({f}-1))",
+    ),
+    # 5 — TILT DOWN (pan downward — weight, consequence)
+    lambda f: (
+        "1.12",
+        "iw/2-(iw/1.12/2)",
+        f"(ih-ih/1.12)*(on-1)/({f}-1)",
+    ),
+    # 6 — PUSH IN + DRIFT RIGHT (documentary rack focus feel)
+    lambda f: (
+        f"1.04+0.12*(on-1)/{f}",
+        f"(iw-iw/zoom)*0.3*(on-1)/({f}-1)",
+        "ih/2-(ih/zoom/2)",
+    ),
+    # 7 — PULL BACK + DRIFT LEFT (subject retreating feeling)
+    lambda f: (
+        f"1.16-0.12*(on-1)/{f}",
+        f"(iw-iw/zoom)*(1-0.3*(on-1)/({f}-1))",
+        "ih/2-(ih/zoom/2)",
+    ),
+    # 8 — DIAGONAL PUSH (top-left → centre, converging energy)
+    lambda f: (
+        f"1.06+0.10*(on-1)/{f}",
+        f"(iw-iw/zoom)*0.5*(1-(on-1)/({f}-1))",
+        f"(ih-ih/zoom)*0.4*(1-(on-1)/({f}-1))",
+    ),
+    # 9 — DIAGONAL PULL (centre → bottom-right, expanding world)
+    lambda f: (
+        f"1.16-0.10*(on-1)/{f}",
+        f"(iw-iw/zoom)*0.5*(on-1)/({f}-1)",
+        f"(ih-ih/zoom)*0.6*(on-1)/({f}-1)",
+    ),
+    # 10 — FACE PUSH (push from bottom-third up — portrait close-up feel)
+    lambda f: (
+        f"1.05+0.13*(on-1)/{f}",
+        "iw/2-(iw/zoom/2)",
+        f"(ih-ih/zoom)*(0.65-(0.15*(on-1)/{f}))",
+    ),
+    # 11 — DRIFT & BREATHE (very slow float — peaceful, meditative)
+    lambda f: (
+        f"1.08+0.04*sin(3.14159*(on-1)/{f})",
+        f"(iw-iw/zoom)*0.5*(on-1)/({f}-1)*0.4",
+        "ih/2-(ih/zoom/2)",
+    ),
 ]
 
 
 def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int,
                out_w: int = OUT_W, out_h: int = OUT_H):
-    """Render one scene: lively Ken Burns movement + audio + padding."""
-    total = dur + SCENE_PAD
-    frames = int(math.ceil(total * FPS))
-    # guard against division by zero in movement formulas
-    frames = max(frames, 2)
+    """Render one scene with a cinematic Ken Burns camera move + audio."""
+    total  = max(dur + SCENE_PAD, 0.5)
+    frames = max(int(math.ceil(total * FPS)), 2)
 
-    move = _KB_MOVES[idx % len(_KB_MOVES)]
-    z_expr, x_expr, y_expr = move(frames)
+    z_expr, x_expr, y_expr = _KB_MOVES[idx % len(_KB_MOVES)](frames)
 
+    # Scale input to 2× output size first (Lanczos), then apply zoompan
     vf = (
         f"scale={out_w * 2}:{out_h * 2}:flags=lanczos,"
         f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}'"
@@ -231,7 +284,7 @@ def _make_clip(img: Path, wav: Path, dur: float, out: Path, idx: int,
         "-vf", vf,
         "-af", f"apad=pad_dur={SCENE_PAD}",
         "-t", f"{total:.3f}",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
         "-c:a", "aac", "-ar", "44100", "-ac", "2",
         str(out),
     ])

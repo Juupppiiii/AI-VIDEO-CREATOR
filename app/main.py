@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Gradio web UI — clean, minimal design adapted from Ultron dashboard.
-Includes progress bars and an Open Folder button.
+AI Comic Documentary Video Creator
+────────────────────────────────────────────────────────────────────────
+Focused on one niche: short-form comic-book documentary Shorts (9:16).
 
-Run:  python server/app/main.py   (opens at http://127.0.0.1:7860)
+Run:  python app/main.py
+Opens at http://127.0.0.1:7860
 """
 import json
 import os
@@ -16,8 +18,8 @@ import time
 import traceback
 from pathlib import Path
 
-# ── path setup ──────────────────────────────────────────────────────────
-_ROOT = Path(__file__).resolve().parent.parent   # project root (app/ → root)
+# ── path setup ───────────────────────────────────────────────────────────
+_ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 os.chdir(_ROOT)
@@ -25,268 +27,134 @@ os.chdir(_ROOT)
 import gradio as gr
 
 from pipeline import config
-from pipeline.script import generate_script, set_logger as set_script_log
-from pipeline.images import generate_images, set_logger as set_img_log
-from pipeline.voice import generate_voice, set_logger as set_voice_log
-from pipeline.assembler import assemble, set_logger as set_asm_log
-from genres.loader import load_genre, genre_ids
-from trends.fetcher import update_trends, suggest_topics, cache_age_hours
+from pipeline.script   import generate_script,  set_logger as set_script_log
+from pipeline.images   import generate_images,   set_logger as set_img_log
+from pipeline.voice    import generate_voice,    set_logger as set_voice_log
+from pipeline.assembler import assemble,         set_logger as set_asm_log
+from genres.loader     import load_genre
+from trends.fetcher    import update_trends, suggest_topics, cache_age_hours
 import requests as _requests
 
-# ── constants ───────────────────────────────────────────────────────────
-RESOLUTIONS = {"720p": (1280, 720), "1080p": (1920, 1080)}
-# Image sizes per format (width, height passed to SD)
-FORMAT_IMG_SIZES = {
-    "Landscape 16:9": (768, 432),
-    "Shorts 9:16":    (432, 768),
+# ── Fixed niche ───────────────────────────────────────────────────────────
+GENRE_ID   = "comic_documentary"
+# Output is always 9:16 portrait (YouTube Shorts)
+OUT_W, OUT_H = 1080, 1920
+IMG_W, IMG_H =  432,  768   # SD 1.5 native 9:16 (multiples of 64)
+
+SCENE_HEADERS = ["Narration", "Image prompt", "Mood"]
+
+# ── Voices ────────────────────────────────────────────────────────────────
+VOICES = {
+    "Adam (male, documentary)"  : "am_adam",
+    "Michael (male, deep)"      : "am_michael",
+    "Heart (female, warm)"      : "af_heart",
+    "Bella (female, smooth)"    : "af_bella",
+    "Nicole (female, calm)"     : "af_nicole",
+    "Sarah (female, bright)"    : "af_sarah",
 }
-# Output video sizes per format
-FORMAT_OUT_SIZES = {
-    "Landscape 16:9": {"720p": (1280, 720),  "1080p": (1920, 1080)},
-    "Shorts 9:16":    {"720p": (1080, 1920), "1080p": (1080, 1920)},
-}
-HEADERS = ["Narration", "Image prompt", "Speaker", "Mood"]
-GENRE_MAP = {
-    "drama_story":        "Drama",
-    "horror_story":       "Horror",
-    "kids_educational":   "Kids",
-    "motivational":       "Motivational",
-    "mystery":            "Mystery",
-    "trivia_quiz":        "Trivia",
-    "stickman":           "Stickman",
-    "comic_documentary":  "Comic Doc",
-}
-LABEL_TO_ID = {v: k for k, v in GENRE_MAP.items()}
 
-# ── Gradio theme (Ultron design tokens) ────────────────────────────────
-THEME = gr.themes.Base(
-    primary_hue=gr.themes.colors.blue,
-    secondary_hue=gr.themes.colors.gray,
-    neutral_hue=gr.themes.colors.gray,
-    font=gr.themes.GoogleFont("Inter"),
-    font_mono=gr.themes.GoogleFont("JetBrains Mono"),
-).set(
-    body_background_fill="#f9fafb", body_text_color="#111827",
-    body_text_color_subdued="#6b7280",
-    block_background_fill="#ffffff", block_border_width="1px",
-    block_border_color="#e5e7eb", container_radius="12px",
-    block_shadow="0 1px 3px 0 rgba(0,0,0,0.04)",
-    block_title_text_color="#111827", block_title_text_size="14px",
-    block_title_text_weight="600",
-    block_label_text_color="#6b7280", block_label_text_size="13px",
-    block_label_text_weight="500",
-    input_background_fill="#ffffff", input_border_color="#e5e7eb",
-    input_border_width="1px", input_radius="8px", input_text_size="14px",
-    input_shadow="none", input_padding="10px 12px",
-    button_primary_background_fill="#2563eb",
-    button_primary_background_fill_hover="#1d4ed8",
-    button_primary_text_color="white", button_primary_border_color="transparent",
-    button_secondary_background_fill="#ffffff",
-    button_secondary_background_fill_hover="#eff6ff",
-    button_secondary_text_color="#2563eb", button_secondary_border_color="#d1d5db",
-    button_border_width="1px",
-    button_primary_shadow="none", button_secondary_shadow="none",
-    button_large_radius="8px", button_large_text_size="14px",
-    button_large_text_weight="600",
-    button_small_radius="6px", button_small_text_size="13px",
-    layout_gap="16px",
-    section_header_text_size="11px", section_header_text_weight="600",
-)
 
-# ── Supplemental CSS ───────────────────────────────────────────────────
-CSS = """
-.gradio-container { max-width: 940px !important; margin: 0 auto !important; }
-.panel-eyebrow { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 12px 2px; }
-.genre-pills .label-wrap { display: none !important; }
-.genre-pills .wrap { gap: 8px !important; }
-.callout-box { border: 1px solid #bfdbfe; border-left: 3px solid #2563eb; border-radius: 8px; background: #eff6ff; padding: 14px 16px; margin-bottom: 12px; }
-.callout-box p { margin: 0; font-size: 13px; color: #374151; line-height: 1.7; }
-.callout-label { font-size: 11px; font-weight: 600; color: #2563eb; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-.console-log textarea { background: #111827 !important; color: #d1d5db !important; border-radius: 8px !important; border: none !important; font-size: 12px !important; line-height: 1.65 !important; padding: 16px !important; }
-.ok-badge span { display: inline-block; background: #f0fdf4; color: #15803d; border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 500; }
-.app-footer { text-align: center; padding: 24px 0 8px; font-size: 12px; color: #9ca3af; }
+# ── Helpers ───────────────────────────────────────────────────────────────
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:36] or "video"
 
-/* Progress bar */
-.pbar-wrap { margin: 8px 0 4px; }
-.pbar-track { background: #f3f4f6; border-radius: 6px; height: 8px; overflow: hidden; }
-.pbar-fill { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
-.pbar-fill-ok { background: #2563eb; }
-.pbar-fill-done { background: #15803d; }
-.pbar-fill-err { background: #b91c1c; }
-.pbar-label { font-size: 12px; color: #6b7280; margin-top: 4px; display: flex; justify-content: space-between; }
-
-/* Open folder button */
-.open-folder-btn button { font-size: 13px !important; }
-"""
-
-# ── helpers ─────────────────────────────────────────────────────────────
-def _choices():
-    return [GENRE_MAP.get(g, g) for g in genre_ids()]
-
-def _to_id(label):
-    return LABEL_TO_ID.get(label, label)
-
-def _slugify(t):
-    return re.sub(r"[^a-z0-9]+", "-", t.lower()).strip("-")[:40] or "video"
-
-def _ollama_ok():
+def _ollama_ok() -> bool:
     try:
-        return _requests.get(config.OLLAMA_URL.replace("/api/chat", ""), timeout=3).ok
+        r = _requests.get("http://localhost:11434/api/tags", timeout=3)
+        return r.status_code == 200
     except Exception:
         return False
 
 
-# ── progress bar ────────────────────────────────────────────────────────
-def _pbar_html(frac: float, stage: str = "") -> str:
-    """Render an HTML progress bar. frac in 0.0-1.0, negative = error."""
-    if frac < 0:
-        return (
-            '<div class="pbar-wrap"><div class="pbar-track">'
-            '<div class="pbar-fill pbar-fill-err" style="width:100%"></div>'
-            '</div><div class="pbar-label"><span>Error</span></div></div>'
-        )
-    pct = min(int(frac * 100), 100)
-    cls = "pbar-fill-done" if pct >= 100 else "pbar-fill-ok"
+# ── Progress bar HTML ─────────────────────────────────────────────────────
+def _pbar(frac: float, stage: str) -> str:
+    pct = max(0, min(100, int(frac * 100)))
+    color = "#2563eb" if pct < 100 else "#16a34a"
     return (
-        f'<div class="pbar-wrap"><div class="pbar-track">'
-        f'<div class="pbar-fill {cls}" style="width:{pct}%"></div>'
-        f'</div><div class="pbar-label">'
-        f'<span>{stage}</span><span>{pct}%</span></div></div>'
+        f'<div style="margin:6px 0 2px;font-size:12px;color:#6b7280">{stage}</div>'
+        f'<div style="background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden">'
+        f'<div style="background:{color};height:100%;width:{pct}%;'
+        f'border-radius:999px;transition:width .4s ease"></div></div>'
+        f'<div style="font-size:11px;color:#9ca3af;margin-top:2px">{pct}%</div>'
     )
 
-
-def _estimate_render_progress(lines: list[str]) -> tuple[float, str]:
-    """Parse log lines to estimate render progress and current stage."""
-    if not lines:
-        return 0.0, ""
-    text = "\n".join(lines[-8:])
-
-    if "ERROR" in text:
-        return -1.0, "Error"
-    if "Done" in text:
-        return 1.0, "Complete"
-
-    # Walk backwards for the most recent stage marker
-    for line in reversed(lines):
-        if m := re.search(r"Image (\d+)/(\d+) done", line):
-            return 0.05 + 0.30 * int(m[1]) / int(m[2]), f"Generating images ({m[1]}/{m[2]})"
-        if m := re.search(r"Upscaled (\d+)/(\d+)", line):
-            return 0.35 + 0.05 * int(m[1]) / int(m[2]), f"Upscaling ({m[1]}/{m[2]})"
-        if m := re.search(r"Voice (\d+)/(\d+) done", line):
-            return 0.45 + 0.15 * int(m[1]) / int(m[2]), f"Generating voice ({m[1]}/{m[2]})"
-        if m := re.search(r"Clip (\d+)/(\d+) rendered", line):
-            return 0.65 + 0.12 * int(m[1]) / int(m[2]), f"Rendering clips ({m[1]}/{m[2]})"
-
-    if any("Chaining clips" in l or "transitions" in l for l in lines[-4:]):
-        return 0.82, "Adding transitions"
-    if any("Intro card" in l for l in lines[-4:]):
-        return 0.78, "Creating intro/outro"
-    if any("SFX" in l for l in lines[-4:]):
-        return 0.88, "Generating sound effects"
-    if any("Mixing" in l or "music" in l for l in lines[-4:]):
-        return 0.92, "Mixing audio"
-    if any("Thumbnail" in l for l in lines[-4:]):
-        return 0.96, "Creating thumbnail"
-    if any("Final video" in l for l in lines[-4:]):
-        return 0.98, "Finalizing"
-    if any("Loading image" in l or "Loading Stable" in l for l in lines[-4:]):
-        return 0.03, "Loading image model"
-    if any("Loading Kokoro" in l for l in lines[-4:]):
-        return 0.42, "Loading voice model"
-    if any("Starting" in l for l in lines[-4:]):
-        return 0.01, "Starting"
-
-    return 0.01, "Working"
+def _estimate_progress(lines: list[str]) -> tuple[float, str]:
+    text = "\n".join(lines).lower()
+    if "done —"       in text: return 1.00, "Complete ✓"
+    if "thumbnail"    in text: return 0.97, "Generating thumbnail"
+    if "mixing"       in text: return 0.92, "Mixing audio"
+    if "chaining"     in text: return 0.86, "Chaining transitions"
+    if m := re.search(r"clip (\d+)/(\d+)", text):
+        n, t = int(m.group(1)), int(m.group(2))
+        return 0.55 + 0.28 * (n / t), f"Rendering clip {n}/{t}"
+    if m := re.search(r"voice (\d+)/(\d+)", text):
+        n, t = int(m.group(1)), int(m.group(2))
+        return 0.40 + 0.12 * (n / t), f"Voice {n}/{t}"
+    if m := re.search(r"(?:upscaled?|image) (\d+)/(\d+)", text):
+        n, t = int(m.group(1)), int(m.group(2))
+        return 0.12 + 0.26 * (n / t), f"Image {n}/{t}"
+    if "loading"      in text: return 0.08, "Loading model"
+    if "starting"     in text: return 0.02, "Starting"
+    return 0.01, "Working…"
 
 
-def _estimate_yt_progress(lines: list[str]) -> tuple[float, str]:
-    """Estimate YouTube clipper progress."""
-    if not lines:
-        return 0.0, ""
-    text = "\n".join(lines[-5:])
-
-    if "ERROR" in text:
-        return -1.0, "Error"
-    if "Done" in text:
-        return 1.0, "Complete"
-
-    for line in reversed(lines):
-        if m := re.search(r"Clip (\d+)/(\d+) extracted", line):
-            return 0.50 + 0.35 * int(m[1]) / int(m[2]), f"Clipping ({m[1]}/{m[2]})"
-
-    if any("Downloading" in l for l in lines[-4:]):
-        return 0.10, "Downloading video"
-    if any("Downloaded" in l for l in lines[-4:]):
-        return 0.30, "Downloaded"
-    if any("highlight" in l.lower() for l in lines[-4:]):
-        return 0.40, "Identifying highlights"
-    if any("Highlight reel" in l or "assembl" in l.lower() for l in lines[-4:]):
-        return 0.90, "Assembling highlight reel"
-
-    return 0.05, "Working"
-
-
-# ── open folder ─────────────────────────────────────────────────────────
-def open_output_folder(outdir: str):
-    """Open the output folder in Windows File Explorer."""
-    if not outdir:
-        raise gr.Error("No output folder yet. Generate a video first.")
-    p = Path(outdir)
-    target = p if p.is_dir() else p.parent
-    if not target.is_dir():
-        target = config.OUT_ROOT
-        target.mkdir(parents=True, exist_ok=True)
-    try:
-        os.startfile(str(target))
-    except AttributeError:
-        # Non-Windows fallback
-        subprocess.Popen(["xdg-open", str(target)])
-    return f"Opened: {target}"
-
-
-# ── trends ──────────────────────────────────────────────────────────────
-def refresh_trends():
-    try:
-        update_trends()
-        return _trend_text("Drama")
-    except Exception as e:
-        return f"Could not fetch trends: {e}"
-
-def _trend_text(label):
-    gid = _to_id(label) if label else "drama_story"
-    items = suggest_topics(gid, limit=5)
+# ── Trend suggestions ─────────────────────────────────────────────────────
+def _trends_md() -> str:
+    items = suggest_topics(GENRE_ID, limit=6)
     if not items:
         age = cache_age_hours()
-        return "No trend data yet — click **Refresh** (needs internet)." if age is None else f"Cache is {age:.0f}h old. Click **Refresh** to update."
-    return "\n".join(f"- {s}" for s in items)
+        if age is None:
+            return "_No trend data yet — click **Refresh** (needs internet)._"
+        return f"_Cache is {age:.0f}h old. Click **Refresh** to update._"
+    return "\n".join(f"• {s}" for s in items)
+
+def refresh_trends() -> str:
+    try:
+        update_trends()
+    except Exception:
+        pass
+    return _trends_md()
 
 
-# ── write script (with gr.Progress) ────────────────────────────────────
-def write_script(genre_label, topic, age, n_scenes, model, do_refine, progress=gr.Progress()):
+# ── 1. Write Script ───────────────────────────────────────────────────────
+def write_script(
+    topic: str,
+    custom_prompt: str,
+    n_scenes: int,
+    voice_label: str,
+    model: str,
+    do_refine: bool,
+    progress=gr.Progress(),
+):
     topic = (topic or "").strip()
     if not topic:
         raise gr.Error("Enter a topic first.")
 
-    progress(0.05, desc="Checking Ollama connection...")
+    progress(0.05, desc="Checking Ollama…")
     if not _ollama_ok():
         raise gr.Error("Ollama is not reachable. Run `ollama serve` first.")
 
-    gid = _to_id(genre_label or "Drama")
     try:
-        genre = load_genre(gid)
+        genre = load_genre(GENRE_ID)
     except FileNotFoundError:
-        raise gr.Error(f"Genre '{gid}' not found.")
+        raise gr.Error(f"Genre file '{GENRE_ID}.json' not found in genres/templates/.")
+
+    # Inject custom prompt style into the genre template if provided
+    if custom_prompt and custom_prompt.strip():
+        genre = dict(genre)
+        genre["image_style"] = custom_prompt.strip()
 
     config.OLLAMA_MODEL = model or config.OLLAMA_MODEL
-    outdir = config.OUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}-{gid}-{_slugify(topic)}"
+
+    outdir = config.OUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}-{_slugify(topic)}"
     outdir.mkdir(parents=True, exist_ok=True)
 
-    progress(0.15, desc="Generating script with LLM...")
+    progress(0.15, desc="Writing script with LLM…")
     try:
         script = generate_script(
             topic, genre,
-            n_scenes=int(n_scenes or genre.get("target_scenes", 7)),
-            age=age if age != "general" else None,
+            n_scenes=int(n_scenes),
+            age=None,
             refine=bool(do_refine),
         )
     except SystemExit as e:
@@ -294,16 +162,16 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine, progress=g
     except Exception as e:
         raise gr.Error(f"Script generation failed: {e}")
 
-    progress(0.90, desc="Saving script...")
+    progress(0.95, desc="Saving…")
     (outdir / "script.json").write_text(
-        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8",
+        json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+
     rows = [
-        [s["narration"], s["image_prompt"], s.get("speaker", "narrator"), s.get("mood", "")]
+        [s["narration"], s["image_prompt"], s.get("mood", "curious")]
         for s in script["scenes"]
     ]
     tag = " (refined)" if do_refine else ""
-
     progress(1.0, desc="Done")
     return (
         script.get("title", topic),
@@ -311,49 +179,69 @@ def write_script(genre_label, topic, age, n_scenes, model, do_refine, progress=g
         ", ".join(script.get("tags", [])),
         rows,
         str(outdir),
-        f"Ready{tag} — {len(rows)} scenes",
+        f"✓ {len(rows)} scenes ready{tag}",
     )
 
 
-# ── render video (with progress bar) ───────────────────────────────────
-def render_video(genre_label, outdir, title, desc, tags, table,
-                 speed, res, fmt, seed,
-                 use_anim,
-                 cap_font, cap_size, cap_color, cap_bold, cap_style, cap_pos):
-    if not outdir:
-        raise gr.Error("Generate a script first.")
-    gid = _to_id(genre_label or "Drama")
-    try:
-        genre = load_genre(gid)
-    except FileNotFoundError:
-        raise gr.Error(f"Genre '{gid}' not found.")
+# ── 2. Render Video ───────────────────────────────────────────────────────
+def render_video(
+    outdir_str:    str,
+    title:         str,
+    desc:          str,
+    tags:          str,
+    table,
+    custom_prompt: str,
+    voice_label:   str,
+    speed:         float,
+    seed:          int,
+    use_anim:      bool,
+    # caption settings
+    cap_font:      str,
+    cap_size:      int,
+    cap_color:     str,
+    cap_bold:      bool,
+    cap_style:     str,
+    cap_pos:       str,
+):
+    if not outdir_str:
+        raise gr.Error("Write the script first (Step 1).")
 
-    rows = table.values.tolist() if hasattr(table, "values") else table
+    try:
+        genre = load_genre(GENRE_ID)
+    except FileNotFoundError:
+        raise gr.Error(f"Genre file '{GENRE_ID}.json' not found.")
+
+    if custom_prompt and custom_prompt.strip():
+        genre = dict(genre)
+        genre["image_style"] = custom_prompt.strip()
+
+    rows   = table.values.tolist() if hasattr(table, "values") else (table or [])
     scenes = [
         {
-            "narration": (r[0] or "").strip(),
+            "narration":    (r[0] or "").strip(),
             "image_prompt": (r[1] or "").strip() or (r[0] or "").strip(),
-            "speaker": (r[2] or "").strip() or "narrator",
-            "mood": (r[3] or "").strip() or "neutral",
+            "speaker":      "narrator",
+            "mood":         (r[2] or "").strip() or "curious",
         }
         for r in rows if (r[0] or "").strip()
     ]
     if not scenes:
-        raise gr.Error("Script table is empty.")
+        raise gr.Error("Scene table is empty. Write the script first.")
 
-    outdir = Path(outdir)
+    outdir   = Path(outdir_str)
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    voice_id = VOICES.get(voice_label, "am_adam")
+
+    # Override voice in genre so generate_voice() picks it up
+    genre = dict(genre)
+    genre["voice_map"] = {"narrator": voice_id}
+
     (outdir / "script.json").write_text(
-        json.dumps({"title": title, "description": desc, "tags": tag_list, "scenes": scenes},
+        json.dumps({"title": title, "description": desc,
+                    "tags": tag_list, "scenes": scenes},
                    indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    config.OUT_W, config.OUT_H = RESOLUTIONS.get(res, (1280, 720))
-
-    # Resolve format-aware dimensions
-    fmt = fmt or "Landscape 16:9"
-    img_w, img_h = FORMAT_IMG_SIZES.get(fmt, (1024, 576))
-    out_w, out_h = FORMAT_OUT_SIZES.get(fmt, RESOLUTIONS).get(res, (1280, 720))
 
     q = queue.Queue()
     import pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler
@@ -364,117 +252,121 @@ def render_video(genre_label, outdir, title, desc, tags, table,
 
     for m in (pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler):
         m.set_logger(tee)
-    try:
-        from pipeline.sfx import set_logger as sl1; sl1(tee)
-    except Exception:
-        pass
-    try:
-        from pipeline.thumbnail import set_logger as sl2; sl2(tee)
-    except Exception:
-        pass
+    for mod_name in ("pipeline.sfx", "pipeline.thumbnail", "pipeline.animate"):
+        try:
+            mod = __import__(mod_name, fromlist=["set_logger"])
+            mod.set_logger(tee)
+        except Exception:
+            pass
 
-    result = {}
+    result: dict = {}
 
     def work():
         try:
             if use_anim:
-                from pipeline.animate import generate_animated_clips, set_logger as set_anim_log
-                set_anim_log(tee)
+                from pipeline.animate import generate_animated_clips, set_logger as _sl
+                _sl(tee)
                 imgs = generate_animated_clips(
                     scenes, genre, outdir, int(seed),
-                    img_w=img_w, img_h=img_h,
+                    img_w=IMG_W, img_h=IMG_H,
                 )
             else:
-                imgs = generate_images(scenes, genre, outdir, int(seed),
-                                       img_w=img_w, img_h=img_h)
+                imgs = generate_images(
+                    scenes, genre, outdir, int(seed),
+                    img_w=IMG_W, img_h=IMG_H,
+                )
+
             auds, durs = generate_voice(scenes, genre, outdir, float(speed))
+
             result["final"] = assemble(
                 scenes, imgs, auds, durs, genre, outdir,
-                title=title, out_w=out_w, out_h=out_h,
-                caption_font=cap_font or "Arial",
+                title=title,
+                out_w=OUT_W, out_h=OUT_H,
+                caption_font=cap_font   or "Arial",
                 caption_size=int(cap_size or 0),
                 caption_color=cap_color or "white",
                 caption_bold=bool(cap_bold),
                 caption_style=cap_style or "box",
                 caption_position=cap_pos or "bottom",
             )
+
+            # Thumbnail
             if config.GENERATE_THUMBNAIL and imgs:
                 try:
-                    from pipeline.thumbnail import generate_thumbnail
+                    from pipeline.thumbnail import generate_thumbnail, set_logger as _tl
+                    _tl(tee)
                     best = imgs[min(1, len(imgs) - 1)]
-                    raw_n = best.stem.removesuffix("_up") + best.suffix
-                    raw = best.with_name(raw_n)
-                    if raw.exists() and raw != best:
-                        best = raw
-                    generate_thumbnail(title, best, gid, outdir)
+                    raw  = best.with_name(best.stem.removesuffix("_up") + best.suffix)
+                    generate_thumbnail(title, raw if raw.exists() else best,
+                                       GENRE_ID, outdir)
                 except Exception as e:
-                    q.put(f"Thumbnail skipped: {e}")
+                    tee(f"Thumbnail skipped: {e}")
+
             (outdir / "metadata.json").write_text(
                 json.dumps({
-                    "title": title,
-                    "description": (desc or "").strip(),
-                    "tags": tag_list,
-                    "genre": genre.get("name", ""),
-                    "madeForKids": genre.get("made_for_kids", False),
+                    "title":                 title,
+                    "description":           (desc or "").strip(),
+                    "tags":                  tag_list,
+                    "genre":                 "Comic Documentary",
+                    "madeForKids":           False,
                     "containsSyntheticMedia": True,
                 }, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            q.put(f"Done — {outdir / 'final.mp4'}")
+            tee(f"Done — {outdir / 'final.mp4'}")
         except BaseException:
-            q.put("ERROR:\n" + traceback.format_exc())
+            tee("ERROR:\n" + traceback.format_exc())
         finally:
-            q.put(None)
+            tee(None)   # sentinel
 
     threading.Thread(target=work, daemon=True).start()
 
-    lines = ["Starting render..."]
-    yield _pbar_html(0.01, "Starting"), "\n".join(lines), None
+    lines = ["Starting render…"]
+    yield _pbar(0.01, "Starting"), "\n".join(lines), None
+
     while True:
         try:
-            msg = q.get(timeout=2)   # short timeout — keeps WebSocket alive
+            msg = q.get(timeout=2)
         except queue.Empty:
-            # heartbeat: re-yield current state so the connection doesn't drop
-            frac, stage = _estimate_render_progress(lines)
-            yield _pbar_html(frac, stage), "\n".join(lines), None
-            # check if the thread is still alive; if not and queue empty, bail
+            frac, stage = _estimate_progress(lines)
+            yield _pbar(frac, stage), "\n".join(lines), None
             continue
         if msg is None:
             break
         lines.append(msg)
-        frac, stage = _estimate_render_progress(lines)
-        yield _pbar_html(frac, stage), "\n".join(lines), None
+        frac, stage = _estimate_progress(lines)
+        yield _pbar(frac, stage), "\n".join(lines), None
 
     for m in (pipeline.script, pipeline.images, pipeline.voice, pipeline.assembler):
         m.set_logger(print)
 
-    frac, stage = _estimate_render_progress(lines)
+    frac, stage = _estimate_progress(lines)
     yield (
-        _pbar_html(frac, stage),
+        _pbar(frac, stage),
         "\n".join(lines),
         str(result["final"]) if "final" in result else None,
     )
 
 
-# ── youtube clipper (with progress bar) ─────────────────────────────────
-def clip_youtube(url, n_clips, clip_dur, model):
+# ── 3. YouTube Clipper ────────────────────────────────────────────────────
+def clip_youtube(url: str, n_clips: int, clip_dur: int, model: str):
     url = (url or "").strip()
     if not url:
         raise gr.Error("Paste a YouTube URL first.")
-    from pipeline.youtube import check_ytdlp, process_youtube, set_logger
+    from pipeline.youtube import check_ytdlp, process_youtube, set_logger as _yl
     if not check_ytdlp():
         raise gr.Error("yt-dlp not found. Install: pip install yt-dlp")
     if not _ollama_ok():
-        raise gr.Error("Ollama not reachable.")
+        raise gr.Error("Ollama is not reachable. Run `ollama serve` first.")
 
-    q = queue.Queue()
+    q: queue.Queue = queue.Queue()
+    result: dict   = {}
 
     def tee(msg):
         print(msg, flush=True)
         q.put(msg)
 
-    set_logger(tee)
-    result = {}
+    _yl(tee)
 
     def work():
         try:
@@ -483,257 +375,374 @@ def clip_youtube(url, n_clips, clip_dur, model):
                 model=model or None,
             )
             result["final"] = final
-            q.put(f"Done — {final}")
+            tee(f"Done — {final}")
         except BaseException:
-            q.put("ERROR:\n" + traceback.format_exc())
+            tee("ERROR:\n" + traceback.format_exc())
         finally:
-            q.put(None)
+            tee(None)
 
     threading.Thread(target=work, daemon=True).start()
 
-    lines = ["Downloading and analyzing..."]
-    yield _pbar_html(0.05, "Starting"), "\n".join(lines), None
+    lines = ["Downloading and analyzing…"]
+    yield _pbar(0.05, "Starting"), "\n".join(lines), None
+
     while True:
         try:
-            msg = q.get(timeout=2)   # short timeout — keeps WebSocket alive
+            msg = q.get(timeout=2)
         except queue.Empty:
-            frac, stage = _estimate_yt_progress(lines)
-            yield _pbar_html(frac, stage), "\n".join(lines), None
+            yield _pbar(0.10, "Processing…"), "\n".join(lines), None
             continue
         if msg is None:
             break
         lines.append(msg)
-        frac, stage = _estimate_yt_progress(lines)
-        yield _pbar_html(frac, stage), "\n".join(lines), None
+        yield _pbar(0.50, "Clipping"), "\n".join(lines), None
 
-    frac, stage = _estimate_yt_progress(lines)
     yield (
-        _pbar_html(frac, stage),
+        _pbar(1.0 if "final" in result else 0.5, "Done" if "final" in result else "Error"),
         "\n".join(lines),
         str(result["final"]) if "final" in result else None,
     )
 
 
-# ── genre change ────────────────────────────────────────────────────────
-def on_genre_change(label):
-    gid = _to_id(label or "Drama")
+# ── Open folder helper ────────────────────────────────────────────────────
+def open_folder(outdir_str: str):
+    p = Path(outdir_str) if outdir_str else config.OUT_ROOT
+    target = p if p.is_dir() else p.parent
+    target.mkdir(parents=True, exist_ok=True)
     try:
-        genre = load_genre(gid)
-    except FileNotFoundError:
-        return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-    # Auto-set format if the genre specifies a default (e.g. Comic Doc → Shorts 9:16)
-    default_fmt = genre.get("default_format", "Landscape 16:9")
-    return (
-        gr.update(value=genre.get("voice_speed", 0.9)),
-        gr.update(value=genre.get("target_scenes", 7)),
-        gr.update(
-            visible="age_options" in genre,
-            choices=genre.get("age_options", ["general"]),
-            value=genre.get("default_age", "general"),
-        ),
-        _trend_text(label),
-        gr.update(value=default_fmt),
-    )
+        os.startfile(str(target))
+    except AttributeError:
+        subprocess.Popen(["xdg-open", str(target)])
+    return f"Opened: {target}"
 
 
-# ════════════════════════════════════════════════════════════════════════
-# UI
-# ════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
+# GRADIO UI
+# ═══════════════════════════════════════════════════════════════════════════
 
-with gr.Blocks(title="AI Video Creator") as demo:
+THEME = gr.themes.Base(
+    primary_hue=gr.themes.colors.blue,
+    secondary_hue=gr.themes.colors.gray,
+    neutral_hue=gr.themes.colors.gray,
+    font=gr.themes.GoogleFont("Inter"),
+    font_mono=gr.themes.GoogleFont("JetBrains Mono"),
+).set(
+    body_background_fill="#0f172a",
+    body_text_color="#e2e8f0",
+    body_text_color_subdued="#94a3b8",
+    block_background_fill="#1e293b",
+    block_border_color="#334155",
+    block_border_width="1px",
+    container_radius="12px",
+    block_shadow="0 4px 6px -1px rgba(0,0,0,0.3)",
+    block_title_text_color="#f1f5f9",
+    block_title_text_size="14px",
+    block_title_text_weight="600",
+    block_label_text_color="#94a3b8",
+    block_label_text_size="12px",
+    input_background_fill="#0f172a",
+    input_border_color="#334155",
+    input_border_width="1px",
+    input_radius="8px",
+    input_text_size="14px",
+    input_shadow="none",
+    button_primary_background_fill="#2563eb",
+    button_primary_background_fill_hover="#1d4ed8",
+    button_primary_text_color="#ffffff",
+    button_primary_border_color="transparent",
+    button_primary_shadow="none",
+    button_secondary_background_fill="#1e293b",
+    button_secondary_background_fill_hover="#334155",
+    button_secondary_text_color="#94a3b8",
+    button_secondary_border_color="#334155",
+    button_secondary_shadow="none",
+    button_border_width="1px",
+    button_large_radius="8px",
+    button_large_text_size="14px",
+    button_large_text_weight="600",
+    layout_gap="16px",
+    section_header_text_size="11px",
+    section_header_text_weight="600",
+)
+
+CSS = """
+.gradio-container { max-width: 980px !important; margin: 0 auto !important; }
+
+.app-header { text-align:center; padding: 28px 0 20px; }
+.app-header h1 { font-size:26px; font-weight:700; color:#f1f5f9; margin:0 0 6px; }
+.app-header p  { font-size:13px; color:#64748b; margin:0; }
+
+.section-label {
+  font-size:11px; font-weight:600; color:#3b82f6;
+  text-transform:uppercase; letter-spacing:.06em;
+  margin: 0 0 10px 2px;
+}
+.hint {
+  font-size:12px; color:#64748b;
+  background:#1e293b; border:1px solid #334155;
+  border-radius:8px; padding:10px 14px; margin-bottom:4px;
+  line-height:1.6;
+}
+
+/* dark console log */
+.console textarea {
+  background:#0a0f1a !important; color:#a3e635 !important;
+  font-family:'JetBrains Mono',monospace !important;
+  font-size:12px !important; line-height:1.7 !important;
+  border:none !important; border-radius:8px !important;
+  padding:14px !important;
+}
+
+/* status badge */
+.status span {
+  display:inline-block; background:#1e3a5f; color:#60a5fa;
+  border-radius:999px; padding:4px 14px;
+  font-size:12px; font-weight:500;
+}
+
+/* open folder small btn */
+.small-btn button { font-size:12px !important; padding:6px 14px !important; }
+
+/* progress bar container */
+.pbar-wrap { margin: 4px 0 8px; }
+"""
+
+# ── Build UI ───────────────────────────────────────────────────────────────
+with gr.Blocks(title="Comic Doc Studio") as demo:
+
     outdir_state = gr.State("")
 
-    gr.Markdown(
-        "# AI Video Creator\n"
-        "Generate AI videos from a topic or clip highlights from YouTube. "
-        "Runs locally on your GPU."
+    gr.HTML(
+        '<div class="app-header">'
+        '<h1>🎬 Comic Documentary Studio</h1>'
+        '<p>Topic → Script → Comic Images → Voiceover → YouTube Short (9:16)</p>'
+        '</div>'
     )
 
     with gr.Tabs():
 
-        # ─── Tab 1: Create ──────────────────────────────────
+        # ═══════════════ TAB 1 : CREATE ════════════════════════════════
         with gr.TabItem("Create Video"):
 
+            # ── STEP 1 ─────────────────────────────────────────────────
             with gr.Group():
-                gr.HTML('<p class="panel-eyebrow">Genre & Topic</p>')
-                genre = gr.Radio(
-                    choices=_choices(), value="Drama",
-                    label="Pick a genre", elem_classes="genre-pills",
-                )
-                gr.HTML(
-                    '<div class="callout-box">'
-                    '<p class="callout-label">Suggested topics</p>'
-                    '</div>'
-                )
-                trends = gr.Markdown(_trend_text("Drama"))
-                btn_trends = gr.Button("Refresh trends", variant="secondary", size="sm")
+                gr.HTML('<p class="section-label">Step 1 — Topic & Style</p>')
 
-                topic = gr.Textbox(
-                    label="Topic / Premise",
-                    placeholder="A mother discovers her son has been lying for years...",
+                topic_tb = gr.Textbox(
+                    label="Topic",
+                    placeholder='e.g. "Why the Roman Empire really fell"  or  "The secret life of Tesla"',
                     lines=2,
                 )
-                age = gr.Dropdown(
-                    ["general"], value="general", label="Age group", visible=False,
+
+                custom_prompt_tb = gr.Textbox(
+                    label="Custom Visual Style Prompt  (optional — overrides default comic style)",
+                    placeholder=(
+                        "Leave blank for default comic-book style.\n"
+                        "Or paste your own, e.g.:\n"
+                        "  detailed 2D hand-drawn comic book, ink outlines, muted earthy tones, "
+                        "vintage graphic novel, cinematic composition"
+                    ),
+                    lines=4,
+                    info="This becomes the image_style injected into every scene's image prompt.",
                 )
+
+                gr.HTML(
+                    '<div class="hint">'
+                    '<b>Default style</b>: detailed 2D hand-drawn comic book illustration, '
+                    'semi-realistic characters, expressive faces, clean ink outlines, '
+                    'sketch-like cross-hatch shading, muted earthy tones (beige / brown / olive / gray), '
+                    'vintage graphic novel, cinematic composition — 9:16 portrait.'
+                    '</div>'
+                )
+
                 with gr.Row():
-                    scenes_sl = gr.Slider(3, 12, value=8, step=1, label="Scenes")
+                    n_scenes_sl = gr.Slider(5, 14, value=8, step=1,
+                                            label="Scenes (more = longer video)")
+                    voice_dd = gr.Dropdown(
+                        list(VOICES.keys()),
+                        value="Adam (male, documentary)",
+                        label="Narrator voice",
+                    )
+
+                with gr.Row():
                     model_dd = gr.Dropdown(
                         ["qwen2.5:7b", "llama3.2:3b"],
-                        value=config.OLLAMA_MODEL, label="Model",
+                        value=config.OLLAMA_MODEL,
+                        label="LLM model",
                         allow_custom_value=True,
                     )
-                refine_cb = gr.Checkbox(
-                    value=True,
-                    label="Refine script (second LLM pass for better hooks)",
-                )
-                btn_write = gr.Button("Write Script", variant="primary")
-
-            with gr.Group():
-                gr.HTML('<p class="panel-eyebrow">Script Review</p>')
-                status = gr.Markdown("", elem_classes="ok-badge")
-                title_tb = gr.Textbox(label="Title", interactive=True)
-                with gr.Row():
-                    desc_tb = gr.Textbox(
-                        label="Description", lines=2, interactive=True, scale=2,
+                    refine_cb = gr.Checkbox(
+                        value=True,
+                        label="Refine script (second LLM pass — better hooks & pacing)",
                     )
-                    tags_tb = gr.Textbox(label="Tags", interactive=True, scale=1)
+
+                # Trend suggestions
+                with gr.Accordion("💡 Trending topic suggestions", open=False):
+                    trends_md = gr.Markdown(_trends_md())
+                    gr.Button("Refresh trends", variant="secondary", size="sm"
+                              ).click(refresh_trends, outputs=[trends_md])
+
+                btn_write = gr.Button("1. Write Script", variant="primary", size="lg")
+
+            # ── STEP 2 ─────────────────────────────────────────────────
+            with gr.Group():
+                gr.HTML('<p class="section-label">Step 2 — Review & Edit Script</p>')
+                status_md = gr.Markdown("", elem_classes=["status"])
+                title_tb  = gr.Textbox(label="Video title", interactive=True)
+                with gr.Row():
+                    desc_tb = gr.Textbox(label="Description", lines=2,
+                                         interactive=True, scale=2)
+                    tags_tb = gr.Textbox(label="Tags (comma separated)",
+                                         interactive=True, scale=1)
+
                 scene_table = gr.Dataframe(
-                    headers=HEADERS, datatype=["str"] * 4,
-                    column_count=(4, "fixed"), row_count=(8, "dynamic"),
+                    headers=SCENE_HEADERS, datatype=["str"] * 3,
+                    column_count=(3, "fixed"), row_count=(8, "dynamic"),
                     interactive=True, wrap=True, label="Scenes",
                 )
-                with gr.Row():
-                    speed_sl = gr.Slider(0.7, 1.2, value=0.85, step=0.05, label="Voice speed")
-                    res_dd = gr.Dropdown(
-                        list(RESOLUTIONS), value="720p", label="Resolution",
-                    )
-                    fmt_dd = gr.Dropdown(
-                        list(FORMAT_IMG_SIZES), value="Landscape 16:9",
-                        label="Format",
-                        info="Shorts 9:16 generates vertical video for YouTube Shorts",
-                    )
-                    seed_num = gr.Number(value=1234, precision=0, label="Seed")
-
-                # ── Animation toggle ───────────────────────────────────
-                use_anim_cb = gr.Checkbox(
-                    value=False, label="Animated scenes (AnimateDiff-Lightning)",
-                    info="Generates moving cartoon clips per scene instead of still images. "
-                         "Downloads ~180 MB on first use. Slower but lively.",
+                gr.HTML(
+                    '<div class="hint">'
+                    '<b>Tip:</b> Edit the <i>Narration</i> and <i>Image prompt</i> directly in the table. '
+                    'The image prompt drives what SD 1.5 draws for each scene — be specific about '
+                    'camera angle, expressions, lighting, and setting.'
+                    '</div>'
                 )
 
-                # ── Caption customization ──────────────────────────────
+            # ── STEP 3 ─────────────────────────────────────────────────
+            with gr.Group():
+                gr.HTML('<p class="section-label">Step 3 — Render Settings</p>')
+
+                with gr.Row():
+                    speed_sl  = gr.Slider(0.75, 1.15, value=0.90, step=0.05,
+                                          label="Voice speed")
+                    seed_num  = gr.Number(value=1234, precision=0,
+                                          label="Image seed  (change for different visuals)")
+
+                use_anim_cb = gr.Checkbox(
+                    value=False,
+                    label="Animated scenes (AnimateDiff-Lightning)",
+                    info=(
+                        "Generates moving clips instead of still images. "
+                        "Needs ~3 GB free RAM. First run downloads ~180 MB."
+                    ),
+                )
+
                 with gr.Accordion("Caption settings", open=False):
                     with gr.Row():
-                        cap_font_dd = gr.Dropdown(
-                            ["Arial", "Impact", "Comic Sans MS", "Verdana",
-                             "Trebuchet MS", "Georgia", "Courier New"],
+                        cap_font_dd  = gr.Dropdown(
+                            ["Arial", "Impact", "Verdana", "Georgia",
+                             "Trebuchet MS", "Comic Sans MS", "Courier New"],
                             value="Arial", label="Font",
                         )
-                        cap_size_num = gr.Number(
-                            value=0, precision=0, label="Font size (0 = auto)",
-                            info="0 = 24pt landscape / 26pt Shorts",
-                        )
-                        cap_bold_cb = gr.Checkbox(value=True, label="Bold")
+                        cap_size_num = gr.Number(value=0, precision=0,
+                                                  label="Size (0 = auto 26pt)",
+                                                  info="0 = auto")
+                        cap_bold_cb  = gr.Checkbox(value=True, label="Bold")
                     with gr.Row():
                         cap_color_dd = gr.Dropdown(
                             ["white", "yellow", "cyan", "orange",
                              "pink", "green", "black", "red"],
-                            value="white", label="Text color",
+                            value="white", label="Color",
                         )
                         cap_style_dd = gr.Dropdown(
                             ["box", "outline", "shadow", "plain"],
                             value="box", label="Style",
-                            info="box = semi-transparent bg | outline = text border | shadow | plain",
                         )
-                        cap_pos_dd = gr.Dropdown(
+                        cap_pos_dd   = gr.Dropdown(
                             ["bottom", "top", "middle"],
                             value="bottom", label="Position",
                         )
 
-                btn_render = gr.Button("Render Video", variant="primary")
+                btn_render = gr.Button("2. Render Video", variant="primary", size="lg")
 
+            # ── OUTPUT ─────────────────────────────────────────────────
             with gr.Group():
-                gr.HTML('<p class="panel-eyebrow">Output</p>')
-                progress_bar1 = gr.HTML(_pbar_html(0, "Waiting"))
-                log1 = gr.Textbox(
-                    label="Log", lines=10, max_lines=14,
-                    interactive=False, elem_classes="console-log",
-                )
-                vid1 = gr.Video(label="Video")
-                btn_open1 = gr.Button(
-                    "Open output folder", variant="secondary", size="sm",
-                    elem_classes="open-folder-btn",
-                )
+                gr.HTML('<p class="section-label">Output</p>')
+                pbar1    = gr.HTML(_pbar(0, "Waiting…"), elem_classes=["pbar-wrap"])
+                log1     = gr.Textbox(label="Progress log", lines=12, max_lines=16,
+                                      interactive=False, elem_classes=["console"])
+                vid1     = gr.Video(label="Final video  (9:16 portrait)")
+                btn_open1 = gr.Button("Open output folder",
+                                      variant="secondary", size="sm",
+                                      elem_classes=["small-btn"])
 
-        # ─── Tab 2: YouTube ─────────────────────────────────
+        # ═══════════════ TAB 2 : YOUTUBE CLIPPER ═══════════════════════
         with gr.TabItem("YouTube Clipper"):
+
             with gr.Group():
-                gr.HTML('<p class="panel-eyebrow">Clip highlights from YouTube</p>')
-                gr.Markdown(
-                    "Paste a YouTube URL. The system downloads the video, "
-                    "analyzes the transcript, and assembles a highlight reel."
+                gr.HTML('<p class="section-label">Clip highlights from a YouTube video</p>')
+                gr.HTML(
+                    '<div class="hint">'
+                    'Paste a YouTube URL. The system downloads the video, runs the transcript '
+                    'through the local LLM to find the best moments, clips them, and assembles '
+                    'a highlight reel.'
+                    '</div>'
                 )
-                yt_url = gr.Textbox(
+                yt_url_tb = gr.Textbox(
                     label="YouTube URL",
                     placeholder="https://www.youtube.com/watch?v=...",
                 )
                 with gr.Row():
-                    yt_n = gr.Slider(2, 10, value=5, step=1, label="Clips")
-                    yt_dur = gr.Slider(5, 30, value=15, step=5, label="Clip length (sec)")
-                    yt_model = gr.Dropdown(
+                    yt_n_sl   = gr.Slider(2, 10, value=5, step=1, label="Number of clips")
+                    yt_dur_sl = gr.Slider(5, 30, value=15, step=5, label="Clip length (sec)")
+                    yt_mdl_dd = gr.Dropdown(
                         ["qwen2.5:7b", "llama3.2:3b"],
-                        value=config.OLLAMA_MODEL, label="Model",
+                        value=config.OLLAMA_MODEL,
+                        label="LLM model",
                         allow_custom_value=True,
                     )
                 btn_clip = gr.Button("Clip Highlights", variant="primary")
 
             with gr.Group():
-                gr.HTML('<p class="panel-eyebrow">Output</p>')
-                progress_bar2 = gr.HTML(_pbar_html(0, "Waiting"))
-                log2 = gr.Textbox(
-                    label="Log", lines=10, max_lines=14,
-                    interactive=False, elem_classes="console-log",
-                )
-                vid2 = gr.Video(label="Highlight Reel")
-                btn_open2 = gr.Button(
-                    "Open output folder", variant="secondary", size="sm",
-                    elem_classes="open-folder-btn",
-                )
+                gr.HTML('<p class="section-label">Output</p>')
+                pbar2     = gr.HTML(_pbar(0, "Waiting…"), elem_classes=["pbar-wrap"])
+                log2      = gr.Textbox(label="Progress log", lines=10, max_lines=14,
+                                       interactive=False, elem_classes=["console"])
+                vid2      = gr.Video(label="Highlight reel")
+                btn_open2 = gr.Button("Open output folder",
+                                      variant="secondary", size="sm",
+                                      elem_classes=["small-btn"])
 
     gr.HTML(
-        '<p class="app-footer">'
-        'Each output folder includes thumbnail.png, metadata.json, and scene assets.'
+        '<p style="text-align:center;font-size:11px;color:#334155;padding:20px 0 8px">'
+        'Output folder contains final.mp4 · thumbnail.png · metadata.json · script.json'
         '</p>'
     )
 
-    # ── wiring ──────────────────────────────────────────────
-    genre.change(on_genre_change, [genre], [speed_sl, scenes_sl, age, trends, fmt_dd])
-    btn_trends.click(refresh_trends, outputs=[trends])
-
+    # ── Wiring ─────────────────────────────────────────────────────────
     btn_write.click(
         write_script,
-        [genre, topic, age, scenes_sl, model_dd, refine_cb],
-        [title_tb, desc_tb, tags_tb, scene_table, outdir_state, status],
+        inputs=[topic_tb, custom_prompt_tb, n_scenes_sl,
+                voice_dd, model_dd, refine_cb],
+        outputs=[title_tb, desc_tb, tags_tb, scene_table, outdir_state, status_md],
     )
+
     btn_render.click(
         render_video,
-        [genre, outdir_state, title_tb, desc_tb, tags_tb,
-         scene_table, speed_sl, res_dd, fmt_dd, seed_num,
-         use_anim_cb,
-         cap_font_dd, cap_size_num, cap_color_dd, cap_bold_cb,
-         cap_style_dd, cap_pos_dd],
-        [progress_bar1, log1, vid1],
+        inputs=[
+            outdir_state, title_tb, desc_tb, tags_tb, scene_table,
+            custom_prompt_tb, voice_dd, speed_sl, seed_num, use_anim_cb,
+            cap_font_dd, cap_size_num, cap_color_dd, cap_bold_cb,
+            cap_style_dd, cap_pos_dd,
+        ],
+        outputs=[pbar1, log1, vid1],
     )
+
     btn_clip.click(
         clip_youtube,
-        [yt_url, yt_n, yt_dur, yt_model],
-        [progress_bar2, log2, vid2],
+        inputs=[yt_url_tb, yt_n_sl, yt_dur_sl, yt_mdl_dd],
+        outputs=[pbar2, log2, vid2],
     )
-    btn_open1.click(open_output_folder, [outdir_state], [status])
-    btn_open2.click(open_output_folder, [outdir_state], [status])
+
+    btn_open1.click(open_folder, inputs=[outdir_state], outputs=[status_md])
+    btn_open2.click(open_folder, inputs=[outdir_state], outputs=[status_md])
 
 
 if __name__ == "__main__":
     demo.queue(default_concurrency_limit=1, max_size=1)
-    demo.launch(inbrowser=True, theme=THEME, css=CSS, allowed_paths=[str(config.OUT_ROOT.resolve())])
+    demo.launch(
+        inbrowser=True,
+        theme=THEME,
+        css=CSS,
+        allowed_paths=[str(config.OUT_ROOT.resolve())],
+    )

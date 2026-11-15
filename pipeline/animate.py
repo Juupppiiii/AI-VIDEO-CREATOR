@@ -1,26 +1,33 @@
 """
 Animated clip generation using AnimateDiff-Lightning on SD 1.5.
 
-Each scene prompt produces a 16-frame MP4 clip (~0.64 s at 25 fps).
-The clips are stitched together by the assembler — Ken Burns is skipped
-because the clips already contain motion.
+Produces 16-frame looping MP4 clips per scene (~0.64 s at 25 fps).
+Assembler loops them to match narration duration.
 
-VRAM budget (RTX 4050 6 GB):
-  SD 1.5 UNet      ~2.0 GB fp16  (sequential offload)
-  Motion adapter   ~0.3 GB
-  VAE decode       ~0.5 GB
-  ─────────────────────────────
-  Peak             ~2.8 GB  ✓
+Key memory fixes for RTX 4050 6 GB / 7.7 GB RAM:
+  1. PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True — eliminates the
+     "tried to allocate 864 MiB" fragmentation OOM in VAE decode.
+  2. enable_vae_tiling() — decodes VAE output in tiles instead of one
+     giant tensor, keeps peak VRAM under 2 GB during decode.
+  3. enable_sequential_cpu_offload() — sub-models move to GPU one at a
+     time; peak VRAM ~2 GB, peak RAM ~3 GB.
+  4. Model loaded in a background thread so the Gradio WebSocket gets
+     heartbeat messages and never drops during the ~2-min load.
 
-First run downloads ~180 MB (Lightning adapter checkpoint).
+First run downloads ~180 MB (Lightning adapter).
 SD 1.5 base is already cached from image generation.
 """
 import gc
-import queue
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Any
+
+# ── CRITICAL: set before torch is imported anywhere in this process ───
+os.environ.setdefault(
+    "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True"
+)
 
 from pipeline.config import (
     ANIMATEDIFF_STEPS, ANIMATEDIFF_FRAMES,
@@ -46,37 +53,37 @@ def _free_gpu():
         import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
     except Exception:
         pass
 
 
 def _build_prompt(raw: str, genre: dict[str, Any]) -> str:
-    """Build image prompt — prepend trigger, append style, cap at 70 words."""
+    """Prepend trigger word + style; cap at 70 words (AnimateDiff limit)."""
     style   = genre.get("image_style", "").strip()
     trigger = genre.get("lora_trigger", "").strip()
     mascot  = genre.get("mascot_name")
     look    = genre.get("mascot_look")
     if mascot and look:
         raw = raw.replace(mascot, look)
-    parts = [p for p in (trigger, raw.strip(), style) if p]
+    parts    = [p for p in (trigger, raw.strip(), style) if p]
     combined = ", ".join(parts)
-    words = combined.split()
-    if len(words) > 70:
-        combined = " ".join(words[:70])
-    return combined
+    words    = combined.split()
+    return " ".join(words[:70]) if len(words) > 70 else combined
 
 
 def _negative(genre: dict[str, Any]) -> str:
     extra = genre.get("negative_prompt", "")
-    parts = [p for p in (NEGATIVE_BASE, extra) if p]
-    return ", ".join(parts)
+    return ", ".join(p for p in (NEGATIVE_BASE, extra) if p)
 
 
-def _load_pipe_threaded(result_box: dict, error_box: dict):
+# ── Background model loader ────────────────────────────────────────────
+
+def _load_pipe(result: dict, error: dict) -> None:
     """
-    Load the AnimateDiff pipeline in a background thread so the caller
-    can send heartbeat messages to Gradio while waiting.
-    result_box["pipe"] is set when done; error_box["err"] on failure.
+    Load AnimateDiff-Lightning pipeline onto CPU first, then apply
+    sequential offload.  Runs in a daemon thread so the caller can
+    send heartbeat messages while waiting.
     """
     try:
         import torch
@@ -86,12 +93,12 @@ def _load_pipe_threaded(result_box: dict, error_box: dict):
         from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
 
-        # 1. Download / load motion adapter to CPU
-        ckpt_path = hf_hub_download(ANIMATEDIFF_REPO, ANIMATEDIFF_CKPT)
+        # 1. Motion adapter — load to CPU to avoid pagefile OOM
+        ckpt = hf_hub_download(ANIMATEDIFF_REPO, ANIMATEDIFF_CKPT)
         adapter = MotionAdapter()
-        adapter.load_state_dict(load_file(ckpt_path, device="cpu"))
+        adapter.load_state_dict(load_file(ckpt, device="cpu"))
 
-        # 2. Load SD 1.5 base + adapter (CPU, disable_mmap avoids page-file OOM)
+        # 2. Base pipeline on CPU (disable_mmap avoids Windows page-file OOM)
         pipe = AnimateDiffPipeline.from_pretrained(
             ANIMATEDIFF_BASE,
             motion_adapter=adapter,
@@ -100,113 +107,99 @@ def _load_pipe_threaded(result_box: dict, error_box: dict):
             disable_mmap=True,
         )
 
-        # 3. Lightning scheduler
+        # 3. Lightning scheduler (required for 4-step distilled model)
         pipe.scheduler = EulerDiscreteScheduler.from_config(
             pipe.scheduler.config,
             timestep_spacing="trailing",
             beta_schedule="linear",
         )
 
-        # 4. Sequential CPU offload — each sub-model moves to GPU only
-        #    when needed, keeping peak VRAM ~2.8 GB and peak RAM ~3 GB.
-        pipe.enable_sequential_cpu_offload()
+        # 4. Memory optimisations — ORDER MATTERS
+        #    enable_vae_tiling BEFORE sequential offload
+        pipe.enable_vae_tiling()       # fixes 864 MiB VAE decode OOM
         if hasattr(pipe, "enable_vae_slicing"):
-            pipe.enable_vae_slicing()
+            pipe.enable_vae_slicing()  # extra insurance
+        pipe.enable_sequential_cpu_offload()  # ~2 GB peak VRAM
 
-        result_box["pipe"] = pipe
+        result["pipe"] = pipe
 
-    except Exception as exc:
+    except Exception:
         import traceback
-        error_box["err"] = traceback.format_exc()
+        error["tb"] = traceback.format_exc()
 
 
-# ── public API ──────────────────────────────────────────────────────────
+# ── Public API ─────────────────────────────────────────────────────────
 
 def generate_animated_clips(
     scenes:    list[dict],
     genre:     dict[str, Any],
     outdir:    Path,
-    base_seed: int = 1234,
-    img_w:     int = 512,
-    img_h:     int = 512,
+    base_seed: int  = 1234,
+    img_w:     int  = 512,
+    img_h:     int  = 512,
 ) -> list[Path]:
     """
-    Generate one animated MP4 clip per scene using AnimateDiff-Lightning.
+    Generate one 16-frame animated MP4 per scene using AnimateDiff-Lightning.
 
-    Model loading runs in a side thread and sends periodic heartbeat log
-    messages so Gradio's WebSocket stays alive during the long load.
-
-    Returns a list of MP4 paths (no audio — assembler adds narration).
+    Returns MP4 paths (no audio — assembler muxes narration in).
     """
     import torch
 
     if not torch.cuda.is_available():
-        raise RuntimeError(
-            "CUDA GPU not found. Install the CUDA build of torch."
-        )
+        raise RuntimeError("CUDA GPU not found. Install the CUDA build of torch.")
 
-    # Clamp to 512 max — AnimateDiff + SD 1.5 is stable up to 512×512 on 6 GB
-    safe_w = min(img_w, 512)
-    safe_h = min(img_h, 512)
-    if safe_w != img_w or safe_h != img_h:
-        _ts(f"AnimateDiff: clamped {img_w}x{img_h} → {safe_w}x{safe_h} (VRAM limit)")
+    # Clamp — AnimateDiff + SD 1.5 is VRAM-stable up to 512×512 on 6 GB
+    w = min(img_w, 512)
+    h = min(img_h, 512)
+    if w != img_w or h != img_h:
+        _ts(f"AnimateDiff: clamped {img_w}×{img_h} → {w}×{h} (VRAM budget)")
 
-    # ── Load model in background thread, heartbeat from main thread ────
-    result_box: dict = {}
-    error_box:  dict = {}
+    # ── Load pipeline in background thread ────────────────────────────
+    result: dict = {}
+    error:  dict = {}
+    t = threading.Thread(target=_load_pipe, args=(result, error), daemon=True)
+    _ts("Loading AnimateDiff-Lightning… (first time ~2 min, please wait)")
+    t.start()
 
-    loader = threading.Thread(
-        target=_load_pipe_threaded,
-        args=(result_box, error_box),
-        daemon=True,
-    )
-
-    _ts("Loading AnimateDiff-Lightning (this takes ~60s, please wait)...")
-    loader.start()
-
-    # Send a heartbeat every 5 seconds so the WebSocket stays alive
     t0 = time.time()
-    while loader.is_alive():
+    while t.is_alive():
         time.sleep(5)
-        elapsed = int(time.time() - t0)
-        _ts(f"  Still loading model... ({elapsed}s elapsed, do not close the browser)")
+        _ts(f"  Loading model… {int(time.time()-t0)}s elapsed")
+    t.join()
 
-    loader.join()
+    if "tb" in error:
+        raise RuntimeError(f"AnimateDiff failed to load:\n{error['tb']}")
 
-    if "err" in error_box:
-        raise RuntimeError(f"AnimateDiff model load failed:\n{error_box['err']}")
+    pipe = result["pipe"]
+    _ts("Model ready — generating clips…")
 
-    pipe = result_box["pipe"]
-    _ts("Model loaded. Generating animated clips...")
-
-    # ── Generation loop ────────────────────────────────────────────────
-    clips_dir = outdir / "anim_clips"
-    clips_dir.mkdir(parents=True, exist_ok=True)
-
+    # ── Generation ────────────────────────────────────────────────────
     from diffusers.utils import export_to_video
 
+    clips_dir = outdir / "anim_clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
     neg   = _negative(genre)
     paths: list[Path] = []
 
     for i, scene in enumerate(scenes):
         prompt = _build_prompt(scene["image_prompt"], genre)
         out    = clips_dir / f"scene_{i:02d}.mp4"
+        gen    = torch.Generator(device="cpu").manual_seed(base_seed + i)
 
-        generator = torch.Generator(device="cpu").manual_seed(base_seed + i)
-        result = pipe(
-            prompt=prompt,
-            negative_prompt=neg,
-            num_frames=ANIMATEDIFF_FRAMES,
-            num_inference_steps=ANIMATEDIFF_STEPS,
-            guidance_scale=1.0,   # Lightning 4-step works best at cfg=1
-            width=safe_w,
-            height=safe_h,
-            generator=generator,
-        )
+        video = pipe(
+            prompt            = prompt,
+            negative_prompt   = neg,
+            num_frames        = ANIMATEDIFF_FRAMES,
+            num_inference_steps = ANIMATEDIFF_STEPS,
+            guidance_scale    = 1.0,   # optimal for Lightning 4-step
+            width             = w,
+            height            = h,
+            generator         = gen,
+        ).frames[0]
 
-        export_to_video(result.frames[0], str(out), fps=FPS)
+        export_to_video(video, str(out), fps=FPS)
         paths.append(out)
-        _ts(f"Animated clip {i + 1}/{len(scenes)} done")
+        _ts(f"Clip {i+1}/{len(scenes)} done")
 
     del pipe
     _free_gpu()
