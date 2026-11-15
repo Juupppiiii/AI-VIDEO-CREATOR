@@ -106,9 +106,9 @@ def generate_animated_clips(
         _ts(f"AnimateDiff: clamped size {img_w}x{img_h} → {safe_w}x{safe_h} (VRAM limit)")
 
     _ts("Loading AnimateDiff-Lightning motion adapter...")
-    adapter = MotionAdapter().to("cuda", torch.float16)
+    adapter = MotionAdapter()   # CPU first — move to cuda after pipe is built
     ckpt_path = hf_hub_download(ANIMATEDIFF_REPO, ANIMATEDIFF_CKPT)
-    adapter.load_state_dict(load_file(ckpt_path, device="cuda"))
+    adapter.load_state_dict(load_file(ckpt_path, device="cpu"))
 
     _ts(f"Loading base model: {ANIMATEDIFF_BASE} ...")
     pipe = AnimateDiffPipeline.from_pretrained(
@@ -116,8 +116,8 @@ def generate_animated_clips(
         motion_adapter=adapter,
         torch_dtype=torch.float16,
         safety_checker=None,
-        disable_mmap=True,       # avoids paging file OOM on Windows with small page file
-    ).to("cuda")
+        disable_mmap=True,       # avoids paging file OOM on Windows
+    )
 
     # Lightning scheduler — trailing timestep spacing required
     pipe.scheduler = EulerDiscreteScheduler.from_config(
@@ -125,9 +125,13 @@ def generate_animated_clips(
         timestep_spacing="trailing",
         beta_schedule="linear",
     )
-    pipe.enable_vae_slicing()
-    if hasattr(pipe, "enable_attention_slicing"):
-        pipe.enable_attention_slicing()
+
+    # Sequential CPU offload: moves each sub-model to GPU only when needed,
+    # then immediately back to CPU. Peak VRAM ~2 GB, peak RAM ~3 GB.
+    # This is the only strategy that reliably fits 5 GB VRAM + 7.7 GB RAM.
+    pipe.enable_sequential_cpu_offload()
+    if hasattr(pipe, "enable_vae_slicing"):
+        pipe.enable_vae_slicing()
 
     clips_dir = outdir / "anim_clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
