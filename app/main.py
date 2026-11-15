@@ -120,6 +120,7 @@ def refresh_trends() -> str:
 def write_script(
     topic: str,
     custom_prompt: str,
+    character: str,
     n_scenes: int,
     voice_label: str,
     model: str,
@@ -139,10 +140,13 @@ def write_script(
     except FileNotFoundError:
         raise gr.Error(f"Genre file '{GENRE_ID}.json' not found in genres/templates/.")
 
-    # Inject custom prompt style into the genre template if provided
+    # Inject custom style and/or character block into the genre template
     if custom_prompt and custom_prompt.strip():
         genre = dict(genre)
         genre["image_style"] = custom_prompt.strip()
+    if character and character.strip():
+        genre = dict(genre)
+        genre["character_block"] = character.strip()
 
     config.OLLAMA_MODEL = model or config.OLLAMA_MODEL
 
@@ -191,6 +195,7 @@ def render_video(
     tags:          str,
     table,
     custom_prompt: str,
+    character:     str,
     voice_label:   str,
     speed:         float,
     seed:          int,
@@ -214,6 +219,9 @@ def render_video(
     if custom_prompt and custom_prompt.strip():
         genre = dict(genre)
         genre["image_style"] = custom_prompt.strip()
+    if character and character.strip():
+        genre = dict(genre)
+        genre["character_block"] = character.strip()
 
     rows   = table.values.tolist() if hasattr(table, "values") else (table or [])
     scenes = [
@@ -535,23 +543,32 @@ with gr.Blocks(title="Comic Doc Studio") as demo:
                 )
 
                 custom_prompt_tb = gr.Textbox(
-                    label="Custom Visual Style Prompt  (optional — overrides default comic style)",
+                    label="Custom Visual Style  (optional — overrides default)",
                     placeholder=(
-                        "Leave blank for default comic-book style.\n"
-                        "Or paste your own, e.g.:\n"
-                        "  detailed 2D hand-drawn comic book, ink outlines, muted earthy tones, "
-                        "vintage graphic novel, cinematic composition"
+                        "Leave blank to use the default hybrid style.\n"
+                        "Or paste your own style description here."
                     ),
-                    lines=4,
-                    info="This becomes the image_style injected into every scene's image prompt.",
+                    lines=3,
+                    info="Overrides the image_style field for every scene.",
+                )
+
+                character_tb = gr.Textbox(
+                    label="Narrator Character  (optional — overrides default)",
+                    placeholder=(
+                        "Leave blank to use the default narrator:\n"
+                        "Round white head, dot eyes, yellow beanie, teal shirt, stick arms.\n\n"
+                        "Or describe your own character here — this exact text is injected\n"
+                        "into every single image prompt to keep the character consistent."
+                    ),
+                    lines=5,
+                    info="This is injected word-for-word into every image prompt.",
                 )
 
                 gr.HTML(
                     '<div class="hint">'
-                    '<b>Default style</b>: detailed 2D hand-drawn comic book illustration, '
-                    'semi-realistic characters, expressive faces, clean ink outlines, '
-                    'sketch-like cross-hatch shading, muted earthy tones (beige / brown / olive / gray), '
-                    'vintage graphic novel, cinematic composition — 9:16 portrait.'
+                    '<b>Default style:</b> flat 2D cartoon narrator in a detailed painterly 3D environment. '
+                    'Warm cinematic lighting, deadpan dry humor tone, 9:16 portrait.<br><br>'
+                    '<b>Default narrator:</b> round white head · dot eyes · yellow beanie · teal shirt · stick arms · deadpan expression.'
                     '</div>'
                 )
 
@@ -712,7 +729,7 @@ with gr.Blocks(title="Comic Doc Studio") as demo:
     # ── Wiring ─────────────────────────────────────────────────────────
     btn_write.click(
         write_script,
-        inputs=[topic_tb, custom_prompt_tb, n_scenes_sl,
+        inputs=[topic_tb, custom_prompt_tb, character_tb, n_scenes_sl,
                 voice_dd, model_dd, refine_cb],
         outputs=[title_tb, desc_tb, tags_tb, scene_table, outdir_state, status_md],
     )
@@ -721,7 +738,7 @@ with gr.Blocks(title="Comic Doc Studio") as demo:
         render_video,
         inputs=[
             outdir_state, title_tb, desc_tb, tags_tb, scene_table,
-            custom_prompt_tb, voice_dd, speed_sl, seed_num, use_anim_cb,
+            custom_prompt_tb, character_tb, voice_dd, speed_sl, seed_num, use_anim_cb,
             cap_font_dd, cap_size_num, cap_color_dd, cap_bold_cb,
             cap_style_dd, cap_pos_dd,
         ],

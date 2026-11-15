@@ -44,20 +44,30 @@ def free_gpu():
 
 
 def _build_prompt(raw_prompt: str, genre: dict[str, Any]) -> str:
-    """Prefix the raw image prompt with the genre's art style.
+    """Build the full image prompt for one scene.
 
-    If the genre has a LoRA trigger word, it is prepended so the LoRA
-    activates correctly on every scene.
+    Structure (always in this order so SD 1.5 weights them correctly):
+      1. STYLE block   — overall visual style (from genre["image_style"])
+      2. CHARACTER block — consistent narrator description (genre["character_block"])
+      3. SCENE block   — environment + pose + camera from the LLM (raw_prompt)
+      4. LoRA trigger  — if a LoRA is loaded (genre["lora_trigger"])
+
+    The style and character blocks are injected automatically every scene
+    so the character stays visually consistent without relying on the LLM
+    to repeat the description.
     """
-    style = genre.get("image_style", "")
+    style     = genre.get("image_style", "").strip()
+    character = genre.get("character_block", "").strip()
+    trigger   = genre.get("lora_trigger", "").strip()
+
+    # Mascot substitution (for other genres that use a named mascot)
     mascot_name = genre.get("mascot_name")
     mascot_look = genre.get("mascot_look")
     if mascot_name and mascot_look:
         raw_prompt = raw_prompt.replace(mascot_name, mascot_look)
 
-    # Prepend LoRA trigger word if set (must come first for best activation)
-    trigger = genre.get("lora_trigger", "").strip()
-    parts = [p for p in (trigger, raw_prompt.strip(), style.strip()) if p]
+    # Build ordered parts — skip empty strings
+    parts = [p for p in (style, character, raw_prompt.strip(), trigger) if p]
     return ", ".join(parts)
 
 
