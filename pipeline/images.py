@@ -43,12 +43,13 @@ def free_gpu():
         pass
 
 
-def _build_prompt(raw_prompt: str, genre: dict[str, Any]) -> str:
+def _build_prompt(raw_prompt: str, genre: dict[str, Any], scene: dict | None = None) -> str:
     """Build the full image prompt for one scene.
 
     Structure (always in this order so SD 1.5 weights them correctly):
       1. STYLE block   — overall visual style (from genre["image_style"])
-      2. CHARACTER block — consistent narrator description (genre["character_block"])
+      2. CHARACTER block — consistent narrator/character description
+         Sourced from: scene["continuity_character"] > genre["character_block"]
       3. SCENE block   — environment + pose + camera from the LLM (raw_prompt)
       4. LoRA trigger  — if a LoRA is loaded (genre["lora_trigger"])
 
@@ -57,8 +58,14 @@ def _build_prompt(raw_prompt: str, genre: dict[str, Any]) -> str:
     to repeat the description.
     """
     style     = genre.get("image_style", "").strip()
-    character = genre.get("character_block", "").strip()
     trigger   = genre.get("lora_trigger", "").strip()
+
+    # Character block: scene-level continuity override > genre-level default
+    character = ""
+    if scene and scene.get("continuity_character"):
+        character = scene["continuity_character"].strip()
+    if not character:
+        character = genre.get("character_block", "").strip()
 
     # Mascot substitution (for other genres that use a named mascot)
     mascot_name = genre.get("mascot_name")
@@ -175,7 +182,7 @@ def generate_images(
     raw_paths: list[Path] = []
 
     for i, scene in enumerate(scenes):
-        prompt = _build_prompt(scene["image_prompt"], genre)
+        prompt = _build_prompt(scene["image_prompt"], genre, scene=scene)
         path = img_dir / f"scene_{i:02d}.png"
 
         for retry in range(3):

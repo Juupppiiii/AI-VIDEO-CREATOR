@@ -25,7 +25,7 @@ def _ts(msg: str):
     _log(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
-STAGES = ["images", "voice", "assemble", "qa"]
+STAGES = ["images", "voice", "assemble", "upload_package", "qa"]
 
 
 class PipelineRun:
@@ -168,6 +168,17 @@ class PipelineRun:
         else:
             _ts("  QA passed — no issues found")
 
+    def _run_upload_package(self):
+        _ts("Stage: Upload package (titles, description, hashtags)")
+        from pipeline.upload_package import generate_upload_package
+        # Read the saved script
+        script_path = self.outdir / "script.json"
+        if script_path.exists():
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        else:
+            script = {"title": self.title, "scenes": self.scenes}
+        generate_upload_package(script, self.genre, self.outdir)
+
     # ── restore from checkpoint ─────────────────────────────────────────
 
     def _restore_from_checkpoint(self):
@@ -195,10 +206,11 @@ class PipelineRun:
             _ts(f"Resuming from stage: {resume_from}")
 
         runners = {
-            "images":   self._run_images,
-            "voice":    self._run_voice,
-            "assemble": self._run_assemble,
-            "qa":       self._run_qa,
+            "images":          self._run_images,
+            "voice":           self._run_voice,
+            "assemble":        self._run_assemble,
+            "upload_package":  self._run_upload_package,
+            "qa":              self._run_qa,
         }
 
         skip = True if resume_from else False

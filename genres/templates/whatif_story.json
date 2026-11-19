@@ -1,0 +1,35 @@
+{
+  "name": "What-If Story",
+  "description": "What-if animated stories with flat 2D characters in 3D environments — Mark AI Guy style",
+  "target_scenes": 6,
+  "target_duration_seconds": 60,
+  "clip_duration_seconds": 10,
+
+  "voice": "am_adam",
+  "voice_speed": 0.92,
+  "music_mood": "dramatic",
+
+  "image_style": "A hybrid scene combining FLAT 2D illustrated characters with a fully dimensional stylized 3D environment. Every person must look like a flat hand-drawn animation cel composited into the scene: solid white circular face with a thick consistent dark outline, flat black oval eyes, separate graphic eyebrows, simple drawn mouth, flat solid-color hair and clothing with no gradients or modeled volume, small narrow torso with extremely thin black line arms and legs, simple rounded flat hands and minimal feet. No visible character thickness, sculpted cheeks, rounded skull, cylindrical limbs, fabric volume, skin texture, or realistic anatomy. No highlights, ambient shading, or realistic lighting across faces and clothing. Characters may cast shadows onto the 3D ground but their artwork remains flat and unshaded. Only buildings, trees, pavement, props, and environment objects are shaded 3D objects. Rich readable colors, simple modeled architecture, strong foreground-background separation. Smooth camera tracks, dollies, gentle push-ins, high-angle inserts, and reaction close-ups.",
+
+  "character_block": "",
+
+  "negative_prompt": "3D-rendered character, realistic human face, shaded or glossy character, anime style, photorealism, rounded 3D head, sculpted cheeks, volumetric clothing, skin texture, highlights on character, ambient shading on character, speech bubbles, text, captions, watermark, logo, blurry, low quality, lip-sync, dialogue text, on-screen labels",
+
+  "lora_hf_repo": "",
+  "lora_weight_name": "",
+  "lora_trigger": "",
+  "lora_scale": 0.85,
+
+  "default_format": "Shorts 9:16",
+  "made_for_kids": false,
+
+  "voice_map": {
+    "narrator": "am_adam"
+  },
+
+  "continuity_guide": true,
+
+  "script_system_prompt": "You are a What-If Animated Story Engine. You create imaginative what-if stories with flat 2D cartoon characters in detailed 3D environments. Each story has a clear hook, escalating consequences, and a surprising twist ending. You always reply with valid JSON only.",
+
+  "script_user_template": "Create a what-if animated story about: \"{topic}\"\n\nNumber of scenes: {scenes}\nEach scene is approximately 10 seconds.\n\nSTORY RULES:\n1. HOOK (Scene 1): Open with the most surprising or absurd premise. Example: \"What if pressing a red button made everything around you vanish?\"\n2. ESCALATION: Each scene introduces a new consequence, discovery, or complication. Never repeat the same action.\n3. TWIST ENDING: The final scene delivers a surprising payoff that reframes the whole story.\n4. Characters never speak — all story is told through narration and visual action.\n\nBEFORE WRITING SCENES, define a CONTINUITY GUIDE:\n- Main character: hair color, clothing colors, distinguishing features\n- Supporting cast (if any): same level of detail\n- Starting location: setting, palette, lighting, key props\n- The story's core rule: what causes each consequence\n\nNARRATION STYLE:\n- Natural engaging storytelling: curiosity hook, clear cause-and-effect, escalating stakes\n- 2-3 short sentences per scene (about 10-13 seconds read aloud, ~20-25 words)\n- Narrator describes the story; characters never speak\n- Use present tense for immediacy\n\nIMAGE PROMPTS — describe the SCENE, not the character appearance (style block handles that):\n- WHERE: specific location with 3-6 environment details\n- WHAT: character action, pose, expression, gesture\n- CAMERA: angle and movement (medium shot, push-in, wide, close-up, etc.)\n- LIGHTING: warm/cool, direction, mood\n- MOTION hints: dust drifts, particles, flickering light, etc.\n\nReply with JSON in EXACTLY this shape:\n{\n  \"title\": \"catchy YouTube title under 70 characters\",\n  \"description\": \"2-3 sentence teaser\",\n  \"tags\": [\"whatif\", \"animation\", \"story\", \"...3-5 more\"],\n  \"continuity_guide\": {\n    \"main_character\": \"description of main character appearance\",\n    \"supporting_cast\": [\"character 2 description\", \"...\"],\n    \"starting_location\": \"setting description\",\n    \"story_rule\": \"what causes consequences in this story\"\n  },\n  \"scenes\": [\n    {\n      \"narration\": \"Engaging voiceover. 2-3 sentences.\",\n      \"image_prompt\": \"Environment + character action + camera + lighting + motion. No character appearance.\",\n      \"speaker\": \"narrator\",\n      \"mood\": \"curious\"\n    }\n  ]\n}"
+}

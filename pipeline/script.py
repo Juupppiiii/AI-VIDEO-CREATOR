@@ -183,6 +183,14 @@ def generate_script(
     if data is None:
         sys.exit("Could not get a valid script after 3 attempts.")
 
+    # Inject continuity guide character into each scene for image prompt builder
+    guide = data.get("continuity_guide", {})
+    if guide and guide.get("main_character"):
+        char_desc = guide["main_character"]
+        _ts(f"Continuity guide: injecting character description into all scenes")
+        for s in data["scenes"]:
+            s["continuity_character"] = char_desc
+
     # Optional refinement pass
     if do_refine:
         data = refine_script(data, model)
