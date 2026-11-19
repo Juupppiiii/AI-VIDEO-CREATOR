@@ -186,16 +186,30 @@ def generate_animated_clips(
         out    = clips_dir / f"scene_{i:02d}.mp4"
         gen    = torch.Generator(device="cpu").manual_seed(base_seed + i)
 
-        video = pipe(
-            prompt            = prompt,
-            negative_prompt   = neg,
-            num_frames        = ANIMATEDIFF_FRAMES,
-            num_inference_steps = ANIMATEDIFF_STEPS,
-            guidance_scale    = 1.0,   # optimal for Lightning 4-step
-            width             = w,
-            height            = h,
-            generator         = gen,
-        ).frames[0]
+        try:
+            video = pipe(
+                prompt            = prompt,
+                negative_prompt   = neg,
+                num_frames        = ANIMATEDIFF_FRAMES,
+                num_inference_steps = ANIMATEDIFF_STEPS,
+                guidance_scale    = 1.0,
+                width             = w,
+                height            = h,
+                generator         = gen,
+            ).frames[0]
+        except RuntimeError as e:
+            if "CUDA" in str(e) or "out of memory" in str(e):
+                _ts(f"  Scene {i}: OOM — clearing VRAM and retrying...")
+                _free_gpu()
+                gen = torch.Generator(device="cpu").manual_seed(base_seed + i + 500)
+                video = pipe(
+                    prompt=prompt, negative_prompt=neg,
+                    num_frames=ANIMATEDIFF_FRAMES, num_inference_steps=ANIMATEDIFF_STEPS,
+                    guidance_scale=1.0, width=min(w, 384), height=min(h, 384),
+                    generator=gen,
+                ).frames[0]
+            else:
+                raise
 
         export_to_video(video, str(out), fps=FPS)
         paths.append(out)

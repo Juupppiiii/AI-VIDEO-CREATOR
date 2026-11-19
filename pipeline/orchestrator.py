@@ -142,11 +142,14 @@ class PipelineRun:
                 _ts(f"  Research brief available ({len(brief)} chars) — enriching prompts")
 
         # Check for locked scenes — reuse existing images
-        existing_images = {
-            int(m.group(1)): p
-            for p in (self.outdir / "images").glob("scene_*.png")
-            if (m := __import__("re").match(r"scene_(\d+)", p.stem))
-        } if (self.outdir / "images").is_dir() else {}
+        existing_images = {}
+        img_dir = self.outdir / "images"
+        if img_dir.is_dir():
+            import re as _re
+            for p in img_dir.glob("scene_*.png"):
+                m = _re.match(r"scene_(\d+)", p.stem)
+                if m:
+                    existing_images[int(m.group(1))] = p
 
         if self.use_anim:
             from pipeline.animate import generate_animated_clips
@@ -217,7 +220,8 @@ class PipelineRun:
         generate_upload_package(script, self.genre, self.outdir)
 
     def _run_research(self):
-        _ts("Stage: Research")
+        """Research stage — skipped silently if no internet or Ollama down."""
+        _ts("Stage: Research (optional)")
         try:
             from pipeline.research import research_topic
             brief = research_topic(self.title or "video topic")
@@ -227,7 +231,7 @@ class PipelineRun:
             else:
                 _ts("No research data found — continuing without")
         except Exception as exc:
-            _ts(f"Research skipped: {exc}")
+            _ts(f"Research skipped (non-blocking): {exc}")
 
     # ── restore from checkpoint ─────────────────────────────────────────
 
@@ -285,6 +289,11 @@ class PipelineRun:
                 self._mark_done(stage)
                 _ts(f"Stage {stage} completed")
             except Exception as exc:
+                # Research and upload_package are optional — don't kill the pipeline
+                if stage in ("research", "upload_package"):
+                    _ts(f"Stage {stage} failed (non-blocking): {exc}")
+                    self._mark_done(stage)  # mark done so resume skips it
+                    continue
                 error_msg = f"{stage} failed: {exc}"
                 _ts(f"ERROR in stage {stage}:\n{traceback.format_exc()}")
                 self._mark_failed(stage, str(exc))
