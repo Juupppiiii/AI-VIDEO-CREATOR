@@ -2,19 +2,16 @@
 output/
 data/
 
-# Downloaded FFmpeg archives (winget installs it — no need to track)
-ffmpeg-*.tar.xz
-ffmpeg-*.zip
-ffmpeg-n*/
-
-# Kiro workspace
-.kiro/
-
 # Music and SFX files (large, user-provided)
 music/**/*.mp3
 music/**/*.wav
 sfx/**/*.mp3
 sfx/**/*.wav
+
+# Reference materials (large binaries)
+reference/*.zip
+reference/*.onnx
+reference/*.docx
 
 # Python
 __pycache__/

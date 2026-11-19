@@ -1,2 +1,0 @@
-# Reproducible, tested runtime and test dependencies.
--r requirements.lock
