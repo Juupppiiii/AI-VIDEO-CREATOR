@@ -115,10 +115,11 @@ def _load_pipe(result: dict, error: dict) -> None:
         )
 
         # 4. Memory optimisations — ORDER MATTERS
-        #    enable_vae_tiling BEFORE sequential offload
-        pipe.enable_vae_tiling()       # fixes 864 MiB VAE decode OOM
+        #    Some methods may not exist in all diffusers versions
+        if hasattr(pipe, "enable_vae_tiling"):
+            pipe.enable_vae_tiling()
         if hasattr(pipe, "enable_vae_slicing"):
-            pipe.enable_vae_slicing()  # extra insurance
+            pipe.enable_vae_slicing()
         pipe.enable_sequential_cpu_offload()  # ~2 GB peak VRAM
 
         result["pipe"] = pipe
