@@ -90,3 +90,63 @@ images → voice → assemble → upload_package → qa
 - FFmpeg, Ollama
 
 See [docs/setup_guide.md](docs/setup_guide.md) for full setup instructions.
+
+
+
+####error
+
+[17:05:02] ERROR in stage images:
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\orchestrator.py", line 288, in execute
+    runner()
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\orchestrator.py", line 156, in _run_images
+    self.images = generate_animated_clips(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\animate.py", line 171, in generate_animated_clips
+    raise RuntimeError(f"AnimateDiff failed to load:\n{error['tb']}")
+RuntimeError: AnimateDiff failed to load:
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\animate.py", line 119, in _load_pipe
+    pipe.enable_vae_tiling()       # fixes 864 MiB VAE decode OOM
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\diffusers\configuration_utils.py", line 175, in __getattr__
+    raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+AttributeError: 'AnimateDiffPipeline' object has no attribute 'enable_vae_tiling'
+
+
+ERROR:
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\orchestrator.py", line 288, in execute
+    runner()
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\orchestrator.py", line 156, in _run_images
+    self.images = generate_animated_clips(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\animate.py", line 171, in generate_animated_clips
+    raise RuntimeError(f"AnimateDiff failed to load:\n{error['tb']}")
+RuntimeError: AnimateDiff failed to load:
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\animate.py", line 119, in _load_pipe
+    pipe.enable_vae_tiling()       # fixes 864 MiB VAE decode OOM
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\diffusers\configuration_utils.py", line 175, in __getattr__
+    raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+AttributeError: 'AnimateDiffPipeline' object has no attribute 'enable_vae_tiling'
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\app\main.py", line 181, in work
+    result["final"] = run.execute(resume_from=resume)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\orchestrator.py", line 300, in execute
+    raise RuntimeError(error_msg) from exc
+RuntimeError: images failed: AnimateDiff failed to load:
+Traceback (most recent call last):
+  File "C:\Users\ACHI\Downloads\AI-VIDEO-CREATOR-main\pipeline\animate.py", line 119, in _load_pipe
+    pipe.enable_vae_tiling()       # fixes 864 MiB VAE decode OOM
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ACHI\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\diffusers\configuration_utils.py", line 175, in __getattr__
+    raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+AttributeError: 'AnimateDiffPipeline' object has no attribute 'enable_vae_tiling'
+
