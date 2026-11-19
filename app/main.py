@@ -260,59 +260,58 @@ try:
         primary_hue=gr.themes.colors.blue, secondary_hue=gr.themes.colors.gray,
         neutral_hue=gr.themes.colors.gray,
         font=gr.themes.GoogleFont("Inter"), font_mono=gr.themes.GoogleFont("JetBrains Mono"),
-    ).set(
-        body_background_fill="#0f172a", body_text_color="#e2e8f0", body_text_color_subdued="#94a3b8",
-        block_background_fill="#1e293b", block_border_color="#334155", block_border_width="1px",
-        block_radius="12px", block_shadow="0 2px 8px rgba(0,0,0,0.25)",
-        block_title_text_color="#f1f5f9", block_title_text_size="14px", block_title_text_weight="600",
-        block_label_text_color="#94a3b8", block_label_text_size="12px",
-        input_background_fill="#0f172a", input_border_color="#334155", input_border_width="1px",
-        input_radius="8px", input_text_size="14px", input_shadow="none",
-        button_primary_background_fill="#2563eb", button_primary_background_fill_hover="#1d4ed8",
-        button_primary_text_color="#fff", button_primary_border_color="transparent",
-        button_secondary_background_fill="#1e293b", button_secondary_background_fill_hover="#334155",
-        button_secondary_text_color="#94a3b8", button_secondary_border_color="#334155",
-        button_border_width="1px", button_shadow="none",
-        button_large_radius="8px", button_large_text_size="14px", button_large_text_weight="600",
-        layout_gap="14px",
     )
 except Exception:
-    THEME = gr.themes.Base()
+    THEME = gr.themes.Default()
 
 CSS = """
-/* ── responsive container ── */
-.gradio-container { max-width: 960px !important; margin: 0 auto !important; padding: 0 12px !important; }
+/* ── dark theme via CSS (no .set() needed) ── */
+body, .gradio-container { background: #0f172a !important; color: #e2e8f0 !important; }
+.gradio-container { max-width: 960px !important; margin: 0 auto !important; padding: 0 12px !important;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif !important; }
+
+/* blocks */
+.block, .gr-group, .gr-box, .panel { background: #1e293b !important; border: 1px solid #334155 !important;
+  border-radius: 12px !important; box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important; }
+
+/* inputs */
+input, textarea, select, .gr-input, .gr-text-input { background: #0f172a !important; color: #e2e8f0 !important;
+  border: 1px solid #334155 !important; border-radius: 8px !important; }
+input:focus, textarea:focus { border-color: #2563eb !important; outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important; }
+
+/* labels */
+label, .gr-label, .label-wrap { color: #94a3b8 !important; font-size: 12px !important; }
+
+/* buttons */
+.gr-button-primary, button.primary { background: #2563eb !important; color: #fff !important;
+  border: none !important; border-radius: 8px !important; font-weight: 600 !important; }
+.gr-button-primary:hover, button.primary:hover { background: #1d4ed8 !important; }
+.gr-button-secondary, button.secondary { background: #1e293b !important; color: #94a3b8 !important;
+  border: 1px solid #334155 !important; border-radius: 8px !important; }
+
+/* tabs */
+.tabs button { color: #94a3b8 !important; }
+.tabs button.selected { color: #3b82f6 !important; font-weight: 600 !important; }
+
+/* responsive */
 @media (max-width: 768px) {
   .gradio-container { padding: 0 6px !important; }
-  .gr-row { flex-direction: column !important; }
-  .gr-row > * { min-width: 100% !important; }
+  .gr-row, .row { flex-direction: column !important; }
+  .gr-row > *, .row > * { min-width: 100% !important; }
 }
 
-/* ── header ── */
+/* ── custom classes ── */
 .hdr { text-align:center; padding:24px 0 16px; }
 .hdr h1 { font-size:24px; font-weight:700; color:#f1f5f9; margin:0 0 4px; letter-spacing:-0.02em; }
 .hdr p { font-size:13px; color:#64748b; margin:0; }
-
-/* ── section labels ── */
 .sl { font-size:11px; font-weight:600; color:#3b82f6; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px 2px; }
-
-/* ── hint box ── */
 .hnt { font-size:12px; color:#64748b; background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px 14px; margin-bottom:4px; line-height:1.6; }
-
-/* ── console ── */
 .con textarea { background:#0a0f1a !important; color:#a3e635 !important; font-family:'JetBrains Mono',monospace !important; font-size:11px !important; line-height:1.7 !important; border:none !important; border-radius:8px !important; padding:12px !important; }
-
-/* ── status pill ── */
 .st span { display:inline-block; background:#1e3a5f; color:#60a5fa; border-radius:99px; padding:4px 14px; font-size:12px; font-weight:500; }
-
-/* ── small buttons ── */
 .sm button { font-size:12px !important; padding:6px 14px !important; }
-
-/* ── progress ── */
 .pb { margin:4px 0 8px; }
-
-/* ── footer ── */
-.ft { text-align:center; font-size:11px; color:#334155; padding:16px 0 8px; }
+.ft { text-align:center; font-size:11px; color:#475569; padding:16px 0 8px; }
 """
 
 # ══════════════════════════════════════════════════════════════════════
