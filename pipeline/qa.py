@@ -1,10 +1,12 @@
 """
-Output quality assurance.
+Output quality assurance + scored script QA.
 
 Runs quick checks on the final video to catch common problems
 before the user watches a broken file.
 
-Inspired by the cartoon-audio-short kit's QA pipeline.
+Also provides scored script evaluation that triggers auto-rewrite
+when quality is below threshold (inspired by AI Content Studio's
+self-healing QA retry loop).
 """
 import json
 import subprocess
@@ -124,3 +126,87 @@ def check_video(video: Path | None, outdir: Path) -> list[str]:
     qa_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     return issues
+
+
+# ── Scored Script QA ────────────────────────────────────────────────────
+
+def score_script(
+    script: dict,
+    model: str | None = None,
+    threshold: int = 70,
+) -> tuple[int, str, dict | None]:
+    """Score a script 0-100 and return improvement suggestions.
+
+    Returns (score, feedback, rewritten_script_or_None).
+    If score < threshold, the LLM also returns a rewritten version.
+    """
+    from pipeline.config import OLLAMA_URL, OLLAMA_MODEL
+    import requests
+
+    model = model or OLLAMA_MODEL
+    _ts(f"Scoring script quality (threshold: {threshold})...")
+
+    scenes_text = "\n".join(
+        f"Scene {i+1}: {s.get('narration', '')}"
+        for i, s in enumerate(script.get("scenes", []))
+    )
+
+    system = (
+        "You are a video script quality assessor. Score scripts 0-100 "
+        "on hook strength, pacing, factual accuracy, and narrative arc. "
+        "Reply with valid JSON only."
+    )
+    user = f"""Score this video script:
+
+Title: {script.get("title", "")}
+Scenes:
+{scenes_text}
+
+Evaluate on these criteria (each 0-25 points):
+1. HOOK (0-25): Does scene 1 grab attention in 3 seconds?
+2. PACING (0-25): Does each scene earn the next 15 seconds?
+3. ACCURACY (0-25): Are claims plausible and not obviously wrong?
+4. ARC (0-25): Is there a clear setup, escalation, and payoff?
+
+Return JSON:
+{{
+  "score": 75,
+  "hook_score": 20,
+  "pacing_score": 18,
+  "accuracy_score": 22,
+  "arc_score": 15,
+  "feedback": "specific feedback on what's weak",
+  "rewrite_needed": true
+}}
+
+If the total score is below {threshold}, also include a "rewritten_scenes" array
+with improved narration for each scene (same format as the input)."""
+
+    try:
+        from pipeline.script import _safe_format, _call_ollama
+        data = _call_ollama(system, user, model)
+
+        score = int(data.get("score", 50))
+        feedback = data.get("feedback", "")
+        _ts(f"Script score: {score}/100 (hook={data.get('hook_score')}, "
+            f"pacing={data.get('pacing_score')}, accuracy={data.get('accuracy_score')}, "
+            f"arc={data.get('arc_score')})")
+        _ts(f"Feedback: {feedback[:200]}")
+
+        rewritten = None
+        if score < threshold and data.get("rewritten_scenes"):
+            _ts(f"Score below {threshold} — applying auto-rewrite")
+            rewritten = dict(script)
+            new_scenes = data["rewritten_scenes"]
+            if isinstance(new_scenes, list) and len(new_scenes) == len(script.get("scenes", [])):
+                for i, ns in enumerate(new_scenes):
+                    if isinstance(ns, dict) and ns.get("narration"):
+                        rewritten["scenes"][i]["narration"] = ns["narration"]
+                        if ns.get("image_prompt"):
+                            rewritten["scenes"][i]["image_prompt"] = ns["image_prompt"]
+
+        return score, feedback, rewritten
+
+    except Exception as exc:
+        _ts(f"Script scoring failed: {exc}")
+        return 50, "Scoring unavailable", None

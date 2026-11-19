@@ -103,9 +103,12 @@ def generate_images(
     base_seed: int = 1234,
     img_w: int | None = None,
     img_h: int | None = None,
+    locked_indices: set[int] | None = None,
 ) -> list[Path]:
     """Generate one image per scene. Returns a list of saved PNG paths.
 
+    ``locked_indices``: set of scene indices to SKIP — their existing
+    images are reused. Enables selective regeneration of individual scenes.
     ``img_w`` / ``img_h`` override the config defaults so callers can
     request vertical (9:16) images for YouTube Shorts.
     If ``UPSCALE_IMAGES`` is True, each image is upscaled after generation
@@ -184,6 +187,12 @@ def generate_images(
     for i, scene in enumerate(scenes):
         prompt = _build_prompt(scene["image_prompt"], genre, scene=scene)
         path = img_dir / f"scene_{i:02d}.png"
+
+        # Skip locked scenes — reuse existing image
+        if locked_indices and i in locked_indices and path.exists():
+            raw_paths.append(path)
+            _ts(f"Image {i + 1}/{len(scenes)} locked — reusing existing")
+            continue
 
         for retry in range(3):
             gen = torch.Generator("cuda").manual_seed(base_seed + i + retry * 1000)

@@ -593,6 +593,28 @@ def assemble(
         ]
 
     _run(cmd)
+
+    # ── Step 7: EBU R128 loudness normalization ──
+    # Matches YouTube/TikTok broadcast standards: -14 LUFS, -1.5 dBTP
+    _ts("Applying EBU R128 loudness normalization...")
+    normalized = outdir / "final_loud.mp4"
+    try:
+        _run([
+            "ffmpeg", "-y", "-i", str(final),
+            "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k",
+            str(normalized),
+        ])
+        # Replace original with normalized version
+        final.unlink()
+        normalized.rename(final)
+        _ts("Loudness normalized to -14 LUFS")
+    except Exception as exc:
+        _ts(f"Loudness normalization skipped: {exc}")
+        if normalized.exists():
+            normalized.unlink(missing_ok=True)
+
     _ts(f"Final video: {final}")
     return final
 

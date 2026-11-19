@@ -25,7 +25,7 @@ def _ts(msg: str):
     _log(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
-STAGES = ["images", "voice", "assemble", "upload_package", "qa"]
+STAGES = ["research", "images", "voice", "assemble", "upload_package", "qa"]
 
 
 class PipelineRun:
@@ -86,6 +86,17 @@ class PipelineRun:
         self.durations: list[float] = []
         self.final: Path | None = None
 
+        # Scene locking: indices of scenes that should NOT be regenerated
+        self.locked_scenes: set[int] = set()
+
+    def lock_scene(self, index: int):
+        """Lock a scene so it won't be regenerated on re-runs."""
+        self.locked_scenes.add(index)
+
+    def unlock_scene(self, index: int):
+        """Unlock a scene so it can be regenerated."""
+        self.locked_scenes.discard(index)
+
     # ── checkpoint I/O ──────────────────────────────────────────────────
 
     def _load(self) -> dict:
@@ -122,6 +133,21 @@ class PipelineRun:
 
     def _run_images(self):
         _ts("Stage: Image generation")
+
+        # Inject research brief into scene prompts if available
+        research_path = self.outdir / "research_brief.txt"
+        if research_path.exists():
+            brief = research_path.read_text(encoding="utf-8")[:500]
+            if brief:
+                _ts(f"  Research brief available ({len(brief)} chars) — enriching prompts")
+
+        # Check for locked scenes — reuse existing images
+        existing_images = {
+            int(m.group(1)): p
+            for p in (self.outdir / "images").glob("scene_*.png")
+            if (m := __import__("re").match(r"scene_(\d+)", p.stem))
+        } if (self.outdir / "images").is_dir() else {}
+
         if self.use_anim:
             from pipeline.animate import generate_animated_clips
             self.images = generate_animated_clips(
@@ -130,10 +156,21 @@ class PipelineRun:
             )
         else:
             from pipeline.images import generate_images
-            self.images = generate_images(
-                self.scenes, self.genre, self.outdir, self.seed,
-                img_w=self.img_w, img_h=self.img_h,
-            )
+
+            if self.locked_scenes and existing_images:
+                # Selective regeneration: only regenerate unlocked scenes
+                _ts(f"  Locked scenes: {sorted(self.locked_scenes)} — will reuse their images")
+                all_images = generate_images(
+                    self.scenes, self.genre, self.outdir, self.seed,
+                    img_w=self.img_w, img_h=self.img_h,
+                    locked_indices=self.locked_scenes,
+                )
+                self.images = all_images
+            else:
+                self.images = generate_images(
+                    self.scenes, self.genre, self.outdir, self.seed,
+                    img_w=self.img_w, img_h=self.img_h,
+                )
 
     def _run_voice(self):
         _ts("Stage: Voice generation")
@@ -179,6 +216,19 @@ class PipelineRun:
             script = {"title": self.title, "scenes": self.scenes}
         generate_upload_package(script, self.genre, self.outdir)
 
+    def _run_research(self):
+        _ts("Stage: Research")
+        try:
+            from pipeline.research import research_topic
+            brief = research_topic(self.title or "video topic")
+            if brief:
+                (self.outdir / "research_brief.txt").write_text(brief, encoding="utf-8")
+                _ts(f"Research brief saved ({len(brief)} chars)")
+            else:
+                _ts("No research data found — continuing without")
+        except Exception as exc:
+            _ts(f"Research skipped: {exc}")
+
     # ── restore from checkpoint ─────────────────────────────────────────
 
     def _restore_from_checkpoint(self):
@@ -206,6 +256,7 @@ class PipelineRun:
             _ts(f"Resuming from stage: {resume_from}")
 
         runners = {
+            "research":        self._run_research,
             "images":          self._run_images,
             "voice":           self._run_voice,
             "assemble":        self._run_assemble,
