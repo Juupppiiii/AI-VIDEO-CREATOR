@@ -1,0 +1,40 @@
+services:
+  backend:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./workspace:/app/workspace
+      - ./outputs:/app/outputs
+      - ./assets:/app/assets
+      - ./agent_workspace:/app/agent_workspace
+      - ./videofx_outputs:/app/videofx_outputs
+    environment:
+      STUDIO_API_TOKEN: ${STUDIO_API_TOKEN:?Set STUDIO_API_TOKEN in .env}
+      STUDIO_SECURE_COOKIES: ${STUDIO_SECURE_COOKIES:-true}
+      CORS_ORIGINS: ${STUDIO_PUBLIC_ORIGIN:?Set STUDIO_PUBLIC_ORIGIN in .env}
+      YOUTUBE_REDIRECT_URI: ${STUDIO_PUBLIC_ORIGIN}/api/social/youtube/callback
+      STUDIO_CONFIG_FILE: /app/data/config.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    init: true
+    restart: unless-stopped
+  frontend:
+    build: ./web
+    init: true
+    restart: unless-stopped
+  proxy:
+    image: nginx:1.28-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
