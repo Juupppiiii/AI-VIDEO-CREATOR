@@ -396,6 +396,28 @@ def process_youtube(
 
     highlights, title = identify_highlights(transcript, n_clips, clip_duration, model)
 
+    # Multimodal enhancement: fuse with audio peaks + scene cuts
+    try:
+        from pipeline.audio_analysis import detect_volume_peaks, detect_scene_cuts, fuse_hotspots
+        _ts("Running multimodal analysis (audio peaks + scene cuts)...")
+        peaks = detect_volume_peaks(video, window_seconds=3.0, top_n=15)
+        cuts = detect_scene_cuts(video)
+
+        if highlights and (peaks or cuts):
+            fused = fuse_hotspots(highlights, peaks, cuts)
+            if fused:
+                highlights = [
+                    {
+                        "start": max(0, int(h["time_s"]) - 2),
+                        "duration": clip_duration,
+                        "caption": h.get("caption", ""),
+                    }
+                    for h in fused[:n_clips]
+                ]
+                _ts(f"Using {len(highlights)} multimodal-fused highlights")
+    except Exception as exc:
+        _ts(f"Multimodal analysis skipped: {exc}")
+
     if not highlights:
         _ts("LLM found no highlights. Clipping evenly spaced segments instead.")
         # Fallback: evenly space clips across the video
