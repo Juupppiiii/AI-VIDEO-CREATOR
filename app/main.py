@@ -271,26 +271,20 @@ def render_video(
 
     def work():
         try:
-            if use_anim:
-                from pipeline.animate import generate_animated_clips, set_logger as _sl
-                _sl(tee)
-                imgs = generate_animated_clips(
-                    scenes, genre, outdir, int(seed),
-                    img_w=IMG_W, img_h=IMG_H,
-                )
-            else:
-                imgs = generate_images(
-                    scenes, genre, outdir, int(seed),
-                    img_w=IMG_W, img_h=IMG_H,
-                )
+            from pipeline.orchestrator import PipelineRun, set_logger as set_orch_log
+            set_orch_log(tee)
 
-            auds, durs = generate_voice(scenes, genre, outdir, float(speed))
-
-            result["final"] = assemble(
-                scenes, imgs, auds, durs, genre, outdir,
+            run = PipelineRun(
+                outdir=outdir,
+                scenes=scenes,
+                genre=genre,
                 title=title,
+                seed=int(seed),
+                speed=float(speed),
                 out_w=OUT_W, out_h=OUT_H,
-                caption_font=cap_font   or "Arial",
+                img_w=IMG_W, img_h=IMG_H,
+                use_anim=use_anim,
+                caption_font=cap_font or "Arial",
                 caption_size=int(cap_size or 0),
                 caption_color=cap_color or "white",
                 caption_bold=bool(cap_bold),
@@ -298,12 +292,19 @@ def render_video(
                 caption_position=cap_pos or "bottom",
             )
 
+            # Resume from failed stage if checkpoint exists
+            resume = run.last_failed_stage if run.can_resume else None
+            if resume:
+                tee(f"Resuming from '{resume}' (previous stages preserved)")
+
+            result["final"] = run.execute(resume_from=resume)
+
             # Thumbnail
-            if config.GENERATE_THUMBNAIL and imgs:
+            if config.GENERATE_THUMBNAIL and run.images:
                 try:
                     from pipeline.thumbnail import generate_thumbnail, set_logger as _tl
                     _tl(tee)
-                    best = imgs[min(1, len(imgs) - 1)]
+                    best = run.images[min(1, len(run.images) - 1)]
                     raw  = best.with_name(best.stem.removesuffix("_up") + best.suffix)
                     generate_thumbnail(title, raw if raw.exists() else best,
                                        GENRE_ID, outdir)
