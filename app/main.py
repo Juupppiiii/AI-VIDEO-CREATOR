@@ -255,26 +255,29 @@ def open_folder(d):
 # ══════════════════════════════════════════════════════════════════════
 # THEME + CSS
 # ══════════════════════════════════════════════════════════════════════
-THEME = gr.themes.Base(
-    primary_hue=gr.themes.colors.blue, secondary_hue=gr.themes.colors.gray,
-    neutral_hue=gr.themes.colors.gray,
-    font=gr.themes.GoogleFont("Inter"), font_mono=gr.themes.GoogleFont("JetBrains Mono"),
-).set(
-    body_background_fill="#0f172a", body_text_color="#e2e8f0", body_text_color_subdued="#94a3b8",
-    block_background_fill="#1e293b", block_border_color="#334155", block_border_width="1px",
-    block_radius="12px", block_shadow="0 2px 8px rgba(0,0,0,0.25)",
-    block_title_text_color="#f1f5f9", block_title_text_size="14px", block_title_text_weight="600",
-    block_label_text_color="#94a3b8", block_label_text_size="12px",
-    input_background_fill="#0f172a", input_border_color="#334155", input_border_width="1px",
-    input_radius="8px", input_text_size="14px", input_shadow="none",
-    button_primary_background_fill="#2563eb", button_primary_background_fill_hover="#1d4ed8",
-    button_primary_text_color="#fff", button_primary_border_color="transparent",
-    button_secondary_background_fill="#1e293b", button_secondary_background_fill_hover="#334155",
-    button_secondary_text_color="#94a3b8", button_secondary_border_color="#334155",
-    button_border_width="1px", button_shadow="none",
-    button_large_radius="8px", button_large_text_size="14px", button_large_text_weight="600",
-    layout_gap="14px",
-)
+try:
+    THEME = gr.themes.Base(
+        primary_hue=gr.themes.colors.blue, secondary_hue=gr.themes.colors.gray,
+        neutral_hue=gr.themes.colors.gray,
+        font=gr.themes.GoogleFont("Inter"), font_mono=gr.themes.GoogleFont("JetBrains Mono"),
+    ).set(
+        body_background_fill="#0f172a", body_text_color="#e2e8f0", body_text_color_subdued="#94a3b8",
+        block_background_fill="#1e293b", block_border_color="#334155", block_border_width="1px",
+        block_radius="12px", block_shadow="0 2px 8px rgba(0,0,0,0.25)",
+        block_title_text_color="#f1f5f9", block_title_text_size="14px", block_title_text_weight="600",
+        block_label_text_color="#94a3b8", block_label_text_size="12px",
+        input_background_fill="#0f172a", input_border_color="#334155", input_border_width="1px",
+        input_radius="8px", input_text_size="14px", input_shadow="none",
+        button_primary_background_fill="#2563eb", button_primary_background_fill_hover="#1d4ed8",
+        button_primary_text_color="#fff", button_primary_border_color="transparent",
+        button_secondary_background_fill="#1e293b", button_secondary_background_fill_hover="#334155",
+        button_secondary_text_color="#94a3b8", button_secondary_border_color="#334155",
+        button_border_width="1px", button_shadow="none",
+        button_large_radius="8px", button_large_text_size="14px", button_large_text_weight="600",
+        layout_gap="14px",
+    )
+except Exception:
+    THEME = gr.themes.Base()
 
 CSS = """
 /* ── responsive container ── */
@@ -315,7 +318,7 @@ CSS = """
 # ══════════════════════════════════════════════════════════════════════
 # BUILD UI
 # ══════════════════════════════════════════════════════════════════════
-with gr.Blocks(title="AI Video Creator") as demo:
+with gr.Blocks(title="AI Video Creator", theme=THEME, css=CSS) as demo:
     outdir_state = gr.State("")
 
     gr.HTML('<div class="hdr"><h1>AI Video Creator</h1><p>Script → Images → Voice → Video. All local, all genres.</p></div>')
@@ -363,7 +366,7 @@ with gr.Blocks(title="AI Video Creator") as demo:
                     desc_tb = gr.Textbox(label="Description", lines=2, interactive=True, scale=2)
                     tags_tb = gr.Textbox(label="Tags", interactive=True, scale=1)
                 scene_table = gr.Dataframe(headers=["Narration", "Image prompt", "Mood"],
-                    datatype=["str"]*3, col_count=(3,"fixed"), row_count=(8,"dynamic"),
+                    datatype=["str"]*3,
                     interactive=True, wrap=True, label="Scenes")
 
             with gr.Group():
@@ -428,4 +431,4 @@ with gr.Blocks(title="AI Video Creator") as demo:
 
 if __name__ == "__main__":
     demo.queue(default_concurrency_limit=1, max_size=1)
-    demo.launch(inbrowser=True, theme=THEME, css=CSS, allowed_paths=[str(config.OUT_ROOT.resolve())])
+    demo.launch(inbrowser=True, allowed_paths=[str(config.OUT_ROOT.resolve())])
